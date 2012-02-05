@@ -1,3 +1,11 @@
+ec2-consistent-snapshot (0.42) natty; urgency=low
+
+  * Add support for --pre-freeze and --post-thaw-cmd with patch from
+    Craig Tracey
+    (closes: bug#925725)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sun, 05 Feb 2012 01:52:48 -0800
+
 ec2-consistent-snapshot (0.41) natty; urgency=low
 
   * Correct bug number in changelog.

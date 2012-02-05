@@ -42,6 +42,8 @@ my $snapshot_timeout           = 10.0; # seconds
 my $lock_timeout               =  0.5; # seconds
 my $lock_tries                 = 60;
 my $lock_sleep                 =  5.0; # seconds
+my $pre_freeze_command         = undef;
+my $post_thaw_command          = undef;
 
 Getopt::Long::config('no_ignore_case');
 GetOptions(
@@ -72,6 +74,8 @@ GetOptions(
   'lock-timeout=s'               => \$lock_timeout,
   'lock-tries=s'                 => \$lock_tries,
   'lock-sleep=s'                 => \$lock_sleep,
+  'pre-freeze-command=s'         => \$pre_freeze_command,
+  'post-thaw-command=s'          => \$post_thaw_command,
 ) or pod2usage(2);
 
 my $filesystem_frozen = 0;
@@ -107,6 +111,10 @@ if ( $mysql_stop ) {
   mysql_lock($mysql_dbh);
 }
 
+if ( $pre_freeze_command ) {
+  run_command([$pre_freeze_command]);
+}
+
 # sync may help flush changed blocks, increasing the consistency on
 # un-freezable file systems, and reducing the time the freeze locks changes
 # out on freezable file systems.
@@ -123,6 +131,10 @@ exit 0;
 
 END {
   fs_thaw($freeze_filesystem) if $filesystem_frozen;
+
+  if ( $post_thaw_command ) {
+    run_command([$post_thaw_command]);
+  }
 
   if ( defined($mysql_master_status_file) ) {
     $Debug and warn "$Prog: ", scalar localtime,
@@ -599,6 +611,15 @@ to 60.
 
 How many seconds to sleep between database lock tries.  Defaults
 to 5.0.
+
+=item --pre-freeze-cmd COMMAND
+
+Command to run after MySQL stop/lock and before filesystem freeze.
+
+=item --post-thaw-cmd COMMAND
+
+Command to run immediately after filesystem unfreeze and before MySQL
+start/unlock.
 
 =back
 
