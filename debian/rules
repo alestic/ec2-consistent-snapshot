@@ -1,0 +1,8 @@
+#!/usr/bin/make -f
+
+include /usr/share/cdbs/1/rules/debhelper.mk
+
+PKGDIR=debian/ec2-consistent-snapshot
+
+build/ec2-consistent-snapshot:: 
+	 pod2man --release= ec2-consistent-snapshot > ec2-consistent-snapshot.1

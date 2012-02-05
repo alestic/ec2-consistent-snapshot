@@ -1,0 +1,2 @@
+ec2-consistent-snapshot usr/bin
+ec2-consistent-snapshot.1 usr/share/man/man1

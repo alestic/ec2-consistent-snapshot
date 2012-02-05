@@ -1,0 +1,163 @@
+ec2-consistent-snapshot (0.41) natty; urgency=low
+
+  * Correct bug number in changelog.
+    (closes: bug#746169)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Thu, 28 Apr 2011 14:17:29 -0700
+
+ec2-consistent-snapshot (0.40) lucid; urgency=low
+
+  * Patch from Jefferson Noxon to clarify that file systems other than
+    XFS can be frozen with this software.
+    (closes: bug#720208)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sun, 27 Mar 2011 18:39:28 -0700
+
+ec2-consistent-snapshot (0.38) lucid; urgency=low
+
+  * Patch from Ken Huang to fix --mysql-socket option
+    (closes: bug#712210)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 26 Mar 2011 22:41:26 -0700
+
+ec2-consistent-snapshot (0.37) lucid; urgency=low
+
+  * Add dependency on libnet-amazon-ec2-perl, which is available in
+    Ubuntu 10.04 Lucid and higher.
+
+ -- Eric Hammond <ehammond@thinksome.com>  Tue, 08 Feb 2011 22:05:59 -0800
+
+ec2-consistent-snapshot (0.36) lucid; urgency=low
+
+  * Add dependency on libcrypt-ssleay-perl
+    (closes: bug#658941)
+  * Tweak installation docs for modern Ubuntu
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 29 Nov 2010 11:51:41 -0800
+
+ec2-consistent-snapshot (0.35) lucid; urgency=low
+
+  * Trap sigalrm correctly in event create snapshot API call is slow
+    (closes: bug#631467)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 04 Oct 2010 19:05:42 -0700
+
+ec2-consistent-snapshot (0.34) lucid; urgency=low
+
+  * New --mysql-socket option thanks to Brian Smith
+    (closes: bug#633709)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 04 Oct 2010 17:48:54 -0700
+
+ec2-consistent-snapshot (0.33) lucid; urgency=low
+
+  * Only try to unfreeze the XFS filesystem if we tried to freeze it.
+    (closes: bug#512769)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 04 Oct 2010 15:41:13 -0700
+
+ec2-consistent-snapshot (0.32) lucid; urgency=low
+
+  * Add --aws-credentials option with default in $AWS_CREDENTIALS
+    to help work with situations with multiple credentials.
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sun, 18 Jul 2010 17:39:45 -0700
+
+ec2-consistent-snapshot (0.31) karmic; urgency=low
+
+  * Add more licensing text to make it clear it's open source.
+    (closes: #522825)
+  * Improve detection of master log file and replicaiton position if we are
+    snapshotting a slave database 
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 10 May 2010 19:21:03 -0700
+
+ec2-consistent-snapshot (0.3) karmic; urgency=low
+
+  * The $HOME/.my.cnf contents should not override command line arguments.
+  * Patch from Gryp to run "sync" on all types of file systems, ensuring
+    better consistency.
+    (closes: #512856)
+  * Patch from Gryp to add --mysql-defaults--file option
+    (closes: #512712)
+  * Patch from Gryp to add --mysql-master-status-file option
+    (closes: #512766)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Fri, 19 Feb 2010 01:05:05 -0800
+
+ec2-consistent-snapshot (0.2) karmic; urgency=low
+
+  * Patch from Rod Vagg to fix "Command-line MySQL params ignored when 
+    ~/.my.cnf doesn't exist"
+    (closes: bug#497557)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Thu, 18 Feb 2010 19:16:17 -0800
+
+ec2-consistent-snapshot (0.1-9) karmic; urgency=low
+
+  * Replace "/etc/init.d/mysql stop" with "mysqladmin shutdown".
+    (closes: bug#497557)
+  * Document --description option which was added earlier.
+    (closes: bug#487692)
+  * Read MySQL "host" parameter from .my.cnf if provided.
+    (closes: bug#485978)
+  * Support quoted values in .my.cnf
+    (closes: bug#454184)
+  * Require Net::Amazon::EC2 version 0.11 or higher.
+    (closes: bug#490686)
+  * Require xfsprogs package.
+    (closes: bug#493420)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Wed, 16 Dec 2009 16:54:56 -0800
+
+ec2-consistent-snapshot (0.1-8) karmic; urgency=low
+
+  * Switch package architecture from "all" to "any" for simplicity.
+
+ -- Eric Hammond <ehammond@thinksome.com>  Fri, 20 Nov 2009 03:48:37 -0800
+
+ec2-consistent-snapshot (0.1-7) karmic; urgency=low
+
+  * Support --description option with default.
+    (closes: bug#485692)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Fri, 20 Nov 2009 02:39:14 -0800
+
+ec2-consistent-snapshot (0.1-6) karmic; urgency=low
+
+  * Add experimental --mysql-stop option.
+
+ -- Eric Hammond <ehammond@thinksome.com>  Wed, 11 Nov 2009 23:53:46 -0800
+
+ec2-consistent-snapshot (0.1-5) karmic; urgency=low
+
+  * Update installation instructions to work on Hardy (closes: bug#447660)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 10 Oct 2009 03:14:37 -0700
+
+ec2-consistent-snapshot (0.1-4) karmic; urgency=low
+
+  * Add new options: --aws-access-key-id-file and --aws-secret-access-key-file
+    (closes: bug#445059)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Fri, 09 Oct 2009 11:43:42 -0700
+
+ec2-consistent-snapshot (0.1-3) karmic; urgency=low
+
+  * Grammar and punctuation corrections in the manpage (closes: bug#438761)
+  * Add --mysql-host option to man page (Thanks to Shlomo)
+  * Change architecture from "any" to "all" (Thanks to zarzavin)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Fri, 09 Oct 2009 02:28:27 -0700
+
+ec2-consistent-snapshot (0.1-2) karmic; urgency=low
+
+  * Fix Debian package build
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 28 Sep 2009 00:23:58 -0700
+
+ec2-consistent-snapshot (0.1-1) karmic; urgency=low
+
+  * Initial release
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sun, 27 Sep 2009 19:27:03 -0700

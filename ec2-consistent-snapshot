@@ -1,0 +1,794 @@
+#!/usr/bin/perl
+#
+# Copyright (C) 2009-2011 Eric Hammond <ehammond@thinksome.com>
+#
+use strict;
+use warnings;
+(our $Prog) = ($0 =~ m%([^/]+)$%);
+use Getopt::Long;
+use Pod::Usage;
+use File::Slurp;
+use Time::HiRes qw(ualarm usleep);
+use Net::Amazon::EC2 0.11;
+use POSIX ':signal_h';
+my $SIGALRM = 14;
+
+#---- OPTIONS ----
+
+my $Help                       = 0;
+my $Debug                      = 0;
+my $Quiet                      = 0;
+my $Noaction                   = 0;
+
+my $aws_access_key_id          = $ENV{AWS_ACCESS_KEY_ID};
+my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY};
+my $aws_access_key_id_file     = $ENV{AWS_ACCESS_KEY_ID};
+my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
+my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
+my $region                     = undef;
+my $ec2_endpoint               = undef;
+my $description                = $Prog;
+my $freeze_filesystem          = undef;
+my $mysql                      = 0;
+#my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
+my $mysql_defaults_file        = undef;
+my $mysql_socket               = undef;
+my $mysql_master_status_file   = undef;
+my $mysql_username             = undef;
+my $mysql_password             = undef;
+my $mysql_host                 = undef;
+my $mysql_stop                 = 0;
+my $snapshot_timeout           = 10.0; # seconds
+my $lock_timeout               =  0.5; # seconds
+my $lock_tries                 = 60;
+my $lock_sleep                 =  5.0; # seconds
+
+Getopt::Long::config('no_ignore_case');
+GetOptions(
+  'help|?'                       => \$Help,
+  'debug'                        => \$Debug,
+  'quiet'                        => \$Quiet,
+  'noaction'                     => \$Noaction,
+
+  'aws-access-key-id=s'          => \$aws_access_key_id,
+  'aws-secret-access-key=s'      => \$aws_secret_access_key,
+  'aws-access-key-id-file=s'     => \$aws_access_key_id_file,
+  'aws-secret-access-key-file=s' => \$aws_secret_access_key_file,
+  'aws-credentials-file=s'       => \$aws_credentials_file,
+  'region=s'                     => \$region,
+  'ec2-endpoint=s'               => \$ec2_endpoint,
+  'description=s'                => \$description,
+  'xfs-filesystem=s'             => \$freeze_filesystem,
+  'freeze-filesystem=s'          => \$freeze_filesystem,
+  'mysql'                        => \$mysql,
+  'mysql-defaults-file=s'        => \$mysql_defaults_file,
+  'mysql-socket=s'               => \$mysql_socket,
+  'mysql-master-status-file=s'   => \$mysql_master_status_file,
+  'mysql-username=s'             => \$mysql_username,
+  'mysql-password=s'             => \$mysql_password,
+  'mysql-host=s'                 => \$mysql_host,
+  'mysql-stop'                   => \$mysql_stop,
+  'snapshot-timeout=s'           => \$snapshot_timeout,
+  'lock-timeout=s'               => \$lock_timeout,
+  'lock-tries=s'                 => \$lock_tries,
+  'lock-sleep=s'                 => \$lock_sleep,
+) or pod2usage(2);
+
+my $filesystem_frozen = 0;
+
+pod2usage(1) if $Help;
+
+my @volume_ids = @ARGV;
+pod2usage(2) unless scalar @volume_ids;
+
+$ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
+
+my $freeze_cmd = "fsfreeze";
+$freeze_cmd    = "xfs_freeze"
+    if $freeze_cmd and system("which $freeze_cmd >/dev/null") != 0;
+
+#---- MAIN ----
+
+($aws_access_key_id,      $aws_secret_access_key) = determine_access_keys(
+ $aws_access_key_id,      $aws_secret_access_key,
+ $aws_access_key_id_file, $aws_secret_access_key_file,
+ $aws_credentials_file,
+);
+die "$Prog: ERROR: Can't find AWS access key or secret access key"
+  unless $aws_access_key_id and $aws_secret_access_key;
+$Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+
+my $mysql_stopped = undef;
+my $mysql_dbh = undef;
+if ( $mysql_stop ) {
+  $mysql_stopped = mysql_stop();
+} elsif ( $mysql ) {
+  $mysql_dbh = mysql_connect($mysql_host, $mysql_socket, $mysql_username, $mysql_password);
+  mysql_lock($mysql_dbh);
+}
+
+# sync may help flush changed blocks, increasing the consistency on
+# un-freezable file systems, and reducing the time the freeze locks changes
+# out on freezable file systems.
+run_command(['sync']);
+
+if ( $freeze_filesystem ) {
+    fs_freeze($freeze_cmd, $freeze_filesystem);
+    $filesystem_frozen = 1;
+}
+
+ebs_snapshot(\@volume_ids, $ec2_endpoint, $description);
+
+exit 0;
+
+END {
+  fs_thaw($freeze_filesystem) if $filesystem_frozen;
+
+  if ( defined($mysql_master_status_file) ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+      ": removing master info file: $mysql_master_status_file\n";
+    if ( not $Noaction ) {
+      unlink $mysql_master_status_file
+        or die "$Prog: Couldn't remove file: $mysql_master_status_file: $!\n";
+    }
+  }
+
+  if ( $mysql_stopped ) {
+    mysql_start();
+  } elsif ( $mysql_dbh ) {
+    mysql_unlock($mysql_dbh);
+    $Debug and warn "$Prog: ", scalar localtime, ": MySQL disconnect\n";
+    $mysql_dbh->disconnect;
+  }
+
+  $Debug and warn "$Prog: ", scalar localtime, ": done\n";
+}
+
+#---- METHODS ----
+
+sub ebs_snapshot {
+  my ($volume_ids, $ec2_endpoint, $description) = @_;
+
+  $Debug and warn "$Prog: ", scalar localtime, ": create EC2 object\n";
+  $Debug and warn "$Prog: Endpoint: $ec2_endpoint\n" if $ec2_endpoint;
+
+  # EC2 API object
+  my $ec2 = Net::Amazon::EC2->new(
+    AWSAccessKeyId  => $aws_access_key_id,
+    SecretAccessKey => $aws_secret_access_key,
+    ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
+    # ($Debug ? (debug => 1) : ()),
+  );
+
+ VOLUME:
+  for my $volume_id ( @$volume_ids ) {
+    # Snapshot
+    $Debug and
+      warn "$Prog: ", scalar localtime, ": ec2-create-snapshot $volume_id\n";
+    if ( $Noaction ) {
+      warn "snapshot SKIPPED (--noaction)\n";
+      next VOLUME;
+    }
+
+    my $snapshot;
+    eval {
+      local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+      ualarm($snapshot_timeout * 1_000_000);
+      $snapshot = $ec2->create_snapshot(
+        VolumeId    => $volume_id,
+        Description => $description,
+      );
+      ualarm(0);
+    };
+    ualarm(0);
+    if ( $@  ){
+      warn "$Prog: ERROR: create_snapshot: $@";
+      return undef;
+    }
+
+    my $snapshot_id;
+    if ( not defined $snapshot ) {
+      warn "$Prog: ERROR: create_snapshot returned undef\n";
+    } elsif ( not ref $snapshot ) {
+      warn "$Prog: ERROR: create_snapshot returned '$snapshot'\n";
+    } elsif ( $snapshot->can('snapshot_id') ) {
+      $snapshot_id = $snapshot->snapshot_id;
+      $Quiet or print "$snapshot_id\n";
+    } else {
+      for my $error ( @{$snapshot->errors} ) {
+        warn "$Prog: ERROR: ".$error->message."\n";
+      }
+    }
+  }
+}
+
+sub mysql_connect {
+  my ($mysql_host, $mysql_socket, $mysql_username, $mysql_password) = @_;
+  my $dsn_extra = "";
+
+  require DBI;
+  DBI->import;
+
+  if ( defined($mysql_defaults_file) )
+  {
+    ($mysql_host, $mysql_username, $mysql_password) = read_mydefaultsfile(
+      $mysql_defaults_file,
+    );
+  } else {
+    ($mysql_host, $mysql_username, $mysql_password) = read_mycnf(
+      $mysql_host, $mysql_username, $mysql_password,
+    );
+  }
+  if( defined($mysql_socket) ) {
+    $dsn_extra .= "mysql_socket=$mysql_socket;";
+  }
+
+  $mysql_host ||= 'localhost';
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": MySQL connect as $mysql_username\n";
+
+  my $mysql_dbh = DBI->connect("DBI:mysql:;${dsn_extra}host=$mysql_host",
+                         $mysql_username, $mysql_password)
+    or die "$Prog: ERROR: Unable to connect to MySQL"
+         . " on $mysql_host as $mysql_username";
+
+  return $mysql_dbh;
+}
+
+sub mysql_lock {
+  my ($mysql_dbh) = @_;
+
+  # Don't pass FLUSH TABLES statements on to replication slaves
+  # as this can interfere with long-running queries on the slaves.
+  $mysql_dbh->do(q{ SET SQL_LOG_BIN=0 }) unless $Noaction;
+
+  # Try a flush first without locking so the later flush with lock
+  # goes faster.  This may not be needed as it seems to interfere with
+  # some statements anyway.
+  sql_timeout_retry(
+    q{ FLUSH LOCAL TABLES },
+    "MySQL flush",
+    $lock_timeout,
+    $lock_tries,
+    $lock_sleep,
+  );
+
+  # Get a lock on the entire database
+  sql_timeout_retry(
+    q{ FLUSH LOCAL TABLES WITH READ LOCK },
+    "MySQL flush & lock",
+    $lock_timeout,
+    $lock_tries,
+    $lock_sleep,
+  );
+
+  my ($mysql_logfile, $mysql_position,
+      $mysql_binlog_do_db, $mysql_binlog_ignore_db);
+  if ( not $Noaction ) {
+    # This might be a slave database already
+    my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
+    $mysql_logfile           = $slave_status->{Master_Log_File};
+    $mysql_position          = $slave_status->{Read_Master_Log_Pos};
+    $mysql_binlog_do_db      = $slave_status->{Replicate_Do_DB};
+    $mysql_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
+
+    # or this might be the master
+    ($mysql_logfile, $mysql_position,
+     $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
+      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  })
+      unless $mysql_logfile;
+  }
+
+  $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
+
+  print "$Prog: master_log_file=\"$mysql_logfile\",",
+              " master_log_pos=$mysql_position\n"
+    if $mysql_logfile and not $Quiet;
+
+  if ( defined($mysql_master_status_file) && $mysql_logfile ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+      ": writing MASTER STATUS to $mysql_master_status_file\n";
+    if ( not $Noaction ) {
+      open(MYSQLMASTERSTATUS,"> $mysql_master_status_file") or
+        die "$Prog: Unable to open for write: $mysql_master_status_file: $!\n";
+      print MYSQLMASTERSTATUS <<"EOM";
+master_log_file="$mysql_logfile"
+master_log_pos="$mysql_position"
+master_binlog_do_db="$mysql_binlog_do_db"
+master_binlog_ignore_db="$mysql_binlog_ignore_db"
+EOM
+      close(MYSQLMASTERSTATUS);
+    }
+  }
+
+  return ($mysql_logfile, $mysql_position);
+}
+
+sub mysql_unlock {
+  my ($mysql_dbh) = @_;
+
+  $Debug and warn "$Prog: ", scalar localtime, ": MySQL unlock\n";
+  $mysql_dbh->do(q{ UNLOCK TABLES }) unless $Noaction;
+
+}
+
+sub mysql_stop {
+  $Debug and warn "$Prog: ", scalar localtime, ": MySQL stop\n";
+
+  my $result = system('/usr/bin/mysqladmin', 'shutdown');
+
+  if ( $result != 0 ) {
+    die "$Prog: Unable to stop mysqld: $? $!";
+  }
+
+  return 1;
+}
+
+sub mysql_start {
+  $Debug and warn "$Prog: ", scalar localtime, ": MySQL start\n";
+
+  my $result = system('/etc/init.d/mysql', 'start');
+
+  if ( $result != 0 ) {
+    warn "$Prog: Unable to start mysqld: $? $!";
+  }
+}
+
+# See also:
+#http://search.cpan.org/dist/DBI/DBI.pm#Signal_Handling_and_Canceling_Operations
+sub sql_timeout_retry {
+  my ($sql, $description, $lock_timeout, $lock_tries, $lock_sleep) = @_;
+
+  my $action = POSIX::SigAction->new(
+    sub { die "timeout" },
+    POSIX::SigSet->new( SIGALRM ),
+  );
+  my $oldaction = POSIX::SigAction->new();
+  sigaction($SIGALRM, $action, $oldaction);
+ LOCK:
+  while ( $lock_tries -- ) {
+    $Debug and warn "$Prog: ", scalar localtime, ": $description\n";
+    eval {
+      ualarm($lock_timeout * 1_000_000);
+      $mysql_dbh->do($sql) unless $Noaction;
+      ualarm(0);
+    };
+    ualarm(0);
+    last LOCK unless $@ =~ /timeout/;
+
+  } continue {
+    $Quiet or  warn "$Prog: MySQL timeout at $lock_timeout sec\n";
+    $Debug and warn "$Prog: Trying again in $lock_sleep seconds\n";
+    usleep($lock_sleep * 1_000_000);
+    #TBD: May need to reopen $mysql_dbh here as the handle may not be clean.
+  }
+  sigaction($SIGALRM, $oldaction);
+  die "$Prog: ERROR: MySQL failure: $@" if $@;
+}
+
+sub fs_freeze {
+  my ($freeze_cmd, $freeze_filesystem) = @_;
+
+  run_command([$freeze_cmd, '-f', $freeze_filesystem]);
+}
+
+sub fs_thaw {
+  my ($freeze_filesystem) = @_;
+
+  run_command([$freeze_cmd, '-u', $freeze_filesystem]);
+}
+
+# mysql defaults-file
+sub read_mydefaultsfile {
+  my ($mysql_defaults_file) = @_;
+
+  open(MYCNF, $mysql_defaults_file)
+    or die "$Prog: ERROR: Couldn't open defaults-file $mysql_defaults_file\n";
+  while ( defined (my $line = <MYCNF>) ) {
+    $mysql_host     = $1 if $line =~ m%^\s*host\s*=\s*"?(\S+?)"?$%
+                        and not defined $mysql_host;
+    $mysql_username = $1 if $line =~ m%^\s*user\s*=\s*"?(\S+?)"?$%
+                        and not defined $mysql_username;
+    $mysql_password = $1 if $line =~ m%^\s*password\s*=\s*"?(\S+?)"?$%
+                        and not defined $mysql_password;
+  }
+  close(MYCNF);
+
+  return ($mysql_host, $mysql_username, $mysql_password);
+}
+
+# Look for the MySQL username/password in $HOME/.my.cnf
+sub read_mycnf {
+  my ($mysql_host, $mysql_username, $mysql_password) = @_;
+
+  open(MYCNF, "$ENV{HOME}/.my.cnf")
+    or return($mysql_host, $mysql_username, $mysql_password);
+  while ( defined (my $line = <MYCNF>) ) {
+    $mysql_host     = $1 if $line =~ m%^\s*host\s*=\s*"?(\S+?)"?$%
+                        and not defined $mysql_host;
+    $mysql_username = $1 if $line =~ m%^\s*user\s*=\s*"?(\S+?)"?$%
+                        and not defined $mysql_username;
+    $mysql_password = $1 if $line =~ m%^\s*password\s*=\s*"?(\S+?)"?$%
+                        and not defined $mysql_password;
+  }
+  close(MYCNF);
+
+  return ($mysql_host, $mysql_username, $mysql_password);
+}
+
+
+# Figure out which AWS credentials to use
+sub determine_access_keys {
+  my ($aws_access_key_id,      $aws_secret_access_key,
+      $aws_access_key_id_file, $aws_secret_access_key_file,
+      $aws_credentials_file,
+     ) = @_;
+
+  # 1. --aws-access-key-id and --aws-secret-access-key
+  return ($aws_access_key_id, $aws_secret_access_key)
+    if $aws_access_key_id;
+
+  # 2. --aws-access-key-id-file and --aws-secret-access-key-file
+  if ( $aws_access_key_id_file ) {
+    die "$Prog: Please provide both --aws-access-key-id-file and --aws-secret-access-key-file"
+      unless $aws_secret_access_key_file;
+    $aws_access_key_id    = File::Slurp::read_file($aws_access_key_id_file);
+    $aws_secret_access_key= File::Slurp::read_file($aws_secret_access_key_file);
+    chomp($aws_access_key_id);
+    chomp($aws_secret_access_key);
+    return ($aws_access_key_id, $aws_secret_access_key);
+  }
+
+  # 3. $AWS_CREDENTIALS or $HOME/.awssecret
+  return read_awssecret($aws_credentials_file);
+}
+
+
+# Look for the access keys in $AWS_CREDENTIALS or ~/.awssecret
+sub read_awssecret {
+  my ($aws_credentials_file) = @_;
+      $aws_credentials_file  ||= "$ENV{HOME}/.awssecret";
+  my ($aws_access_key_id, $aws_secret_access_key);
+  eval {
+    ($aws_access_key_id, $aws_secret_access_key) =
+      File::Slurp::read_file($aws_credentials_file);
+    chomp $aws_access_key_id;
+    chomp $aws_secret_access_key;
+  };
+  return ($aws_access_key_id, $aws_secret_access_key);
+}
+
+# Run a system command, warning if there are problems.
+# Pass in reference to an array of command args.
+sub run_command {
+  my ($command) = @_;
+
+  $Debug and warn "$Prog: ", scalar localtime, ": @$command\n";
+  return if $Noaction;
+  eval {
+    system(@$command) and die "failed($?)\n";
+  };
+  warn "$Prog: ERROR: @$command: $@" if $@;
+}
+
+
+=head1 NAME
+
+ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
+
+=head1 SYNOPSIS
+
+ ec2-consistent-snapshot [opts] VOLUMEID...
+
+=head1 OPTIONS
+
+=over
+
+=item -h --help
+
+Print help and exit.
+
+=item -d --debug
+
+Debug mode.
+
+=item -q --quiet
+
+Quiet mode.
+
+=item -n --noaction
+
+Don't do it. Just say what you would have done.
+
+=item --aws-access-key-id KEY
+
+=item --aws-secret-access-key SECRET
+
+Amazon AWS access key and secret access key.  Defaults to
+environment variables or .awssecret file contents described below.
+
+=item --aws-access-key-id-file KEYFILE
+
+=item --aws-secret-access-key-file SECRETFILE
+
+Files containing Amazon AWS access key and secret access key.
+Defaults to environment variables or .awssecret file contents
+described below.
+
+=item  --aws-credentials-file CREDENTIALSFILE
+
+File containing both the Amazon AWS access key and secret access
+key on seprate lines and in that order.  Defaults to contents of
+$AWS_CREDENTIALS environment variable or the value $HOME/.awssecret
+
+=item --region REGION
+
+Specify a different EC2 region like "eu-west-1".  Defaults to
+"us-east-1".
+
+=item --description DESCRIPTION
+
+Specify a description string for the EBS snapshot.  Defaults to the
+name of the program.
+
+=item  --freeze-filesystem MOUNTPOINT
+
+=item --xfs-filesystem MOUNTPOINT [OBSOLESCENT form of the same option]
+
+Indicates that the file system at the specified mount point should be
+flushed and frozen during the snapshot. Requires the xfs_freeze or
+fsfreeze program. Note that xfs_freeze is equivalent to fsfreeze and
+works on any filesystems that support freezing, provided the kernel
+you are using supports it. (Linux Ext3/4, ReiserFS, JFS, XFS.)
+fsfreeze comes with newer versions of util-linux.
+
+=item --mysql
+
+Indicates that the volume contains data files for a running MySQL
+database, which will be flushed and locked during the snapshot.
+
+=item --mysql-defaults-file FILE
+
+MySQL defaults file, containing host, username and password, this 
+option will ignore the --mysql-host, --mysql-username, 
+--mysql-password parameters
+
+=item --mysql-host HOST
+
+=item --mysql-socket PATH
+
+=item --mysql-username USER
+
+=item --mysql-password PASS
+
+MySQL host, socket path, username, and password used to flush logs and
+lock tables.  User must have appropriate permissions.  Defaults to
+$HOME/.my.cnf file contents.
+
+=item --mysql-master-status-file FILE
+
+Store the MASTER STATUS output in a file on the snapshot. It will be
+removed after the EBS snapshot is taken.  This option will be ignored
+with --mysql-stop
+
+=item --mysql-stop
+
+Indicates that the volume contains data files for a running MySQL
+database.  The database is shutdown before the snapshot is initiated
+and restarted afterwards. [EXPERIMENTAL]
+
+=item --snapshot-timeout SECONDS
+
+How many seconds to wait for the snapshot-create to return.  Defaults
+to 10.0
+
+=item --lock-timeout SECONDS
+
+How many seconds to wait for a database lock. Defaults to 0.5.
+Making this too large can force other processes to wait while this
+process waits for a lock.  Better to make it small and try lots of
+times.
+
+=item --lock-tries COUNT
+
+How many times to try to get a database lock before failing.  Defaults
+to 60.
+
+=item --lock-sleep SECONDS
+
+How many seconds to sleep between database lock tries.  Defaults
+to 5.0.
+
+=back
+
+=head1 ARGUMENTS
+
+=over
+    
+=item VOLUMEID
+
+EBS volume id(s) for which a snapshot is to be created.
+
+=back
+
+=head1 DESCRIPTION
+
+This program creates an EBS snapshot for an Amazon EC2 EBS volume.  To
+help ensure consistent data in the snapshot, it tries to flush and
+freeze the file system first as well as flushing and locking the
+database, if applicable.
+
+Filesystems can be frozen during the snapshot. Prior to Linux kernel
+2.6.29, XFS must be used for freezing support. While frozen, a filesystem
+will be consistent on disk and all writes will block.
+
+There are a number of timeouts to reduce the risk of interfering with
+the normal database operation while improving the chances of getting a
+consistent snapshot.
+
+If you have multiple EBS volumes in a RAID configuration, you can
+specify all of the volume ids on the command line and it will create
+snapshots for each while the filesystem and database are locked.  Note
+that it is your responsibility to keep track of the resulting snapshot
+ids and to figure out how to put these back together when you need to
+restore the RAID setup.
+
+If you have multiple EBS volumes which are hosting different file
+systems, it might be better to simply run the command once for each
+volume id.
+
+=head1 EXAMPLES
+
+Snapshot a volume with a frozen file system under /vol containing a
+MySQL database:
+
+ ec2-consistent-snapshot --mysql --freeze-filesystem /vol vol-VOLUMEID
+
+Snapshot a volume mounted with a frozen file system on /var/local but
+with no MySQL database:
+
+ ec2-consistent-snapshot --freeze-filesystem /var/local vol-VOLUMEID
+
+Snapshot four European volumes in a RAID configuration with MySQL,
+saving the snapshots with a description marking the current time:
+
+ ec2-consistent-snapshot                                      \
+   --mysql                                                    \
+   --freeze-filesystem /vol                                      \
+   --region eu-west-1                                         \
+   --description "RAID snapshot $(date +'%Y-%m-%d %H:%M:%S')" \
+   vol-VOL1 vol-VOL2 vol-VOL3 vol-VOL4
+
+=head1 ENVIRONMENT
+
+=over
+
+=item $AWS_ACCESS_KEY_ID
+
+Default value for access key.
+Can be overridden by command line options.
+
+=item $AWS_SECRET_ACCESS_KEY
+
+Default value for secret access key.  Can be overridden by command
+line options.
+
+=item $AWS_CREDENTIALS
+
+Default value for filename containing both access key and secret
+access key on separate lines and in that order. Can be overriden by
+the --aws-credentials command line option.
+
+=back
+
+=head1 FILES
+
+=over
+
+=item $HOME/.my.cnf
+
+Default values for MySQL user and password are sought here in the
+standard format.
+
+=item $HOME/.awssecret
+
+Default values for access key and secret access keys are sought here.
+Can be overridden by environment variables and command line options.
+
+=back
+
+=head1 INSTALLATION
+
+On most Ubuntu releases, the B<ec2-consistent-snapshot> package can be
+installed directly from the Alestic.com PPA using the following
+commands:
+
+ sudo add-apt-repository ppa:alestic
+ sudo apt-get update
+ sudo apt-get install ec2-consistent-snapshot
+
+This program may also require the installation of the Net::Amazon::EC2
+Perl package from CPAN.  On Ubuntu 10.04 Lucid and higher, this should
+happen automatically by the dependency on the libnet-amazon-ec2-perl
+package.
+
+On some earlier releases of Ubuntu you can install the required
+package with the following command:
+
+ sudo PERL_MM_USE_DEFAULT=1 cpan Net::Amazon::EC2
+
+On Ubuntu 8.04 Hardy, use the following commands instead:
+
+ code=$(lsb_release -cs)
+ echo "deb http://ppa.launchpad.net/alestic/ppa/ubuntu $code main"|
+   sudo tee /etc/apt/sources.list.d/alestic-ppa.list
+ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys BE09C571
+ sudo apt-get update
+ sudo apt-get install ec2-consistent-snapshot build-essential
+ sudo cpan Net::Amazon::EC2
+
+The default values can be accepted for most of the prompts, though it
+is necessary to select a CPAN mirror on Hardy.
+
+=head1 SEE ALSO
+
+=over
+
+=item Amazon EC2
+
+=item  Amazon EC2 EBS (Elastic Block Store)
+
+=item  ec2-create-snapshot
+
+=back
+
+=head1 CAVEATS
+
+This program currently supports the MySQL database.  Patches are
+welcomed for other databases.
+
+EBS snapshots are a critical part of protecting your valuable data.
+This program or the environment in which it is run may contain defects
+that cause snapshots to not be created.  Please test and check to make
+sure that snapshots are getting created for the volumes as you intend.
+
+EBS snapshots cost money to create and to store in your AWS account.
+Be aware of and monitor your expenses.
+
+You are responsible for what happens in your EC2 account.  This
+software is intended, but not guaranteed, to help in that effort.
+
+This program tries hard to figure out some values are for the AWS key
+and AWS secret access key.  In fact, it tries too hard.  This results
+in possibly using some credentials it finds that are not the correct
+ones you wish to use, especially if you are operating in an
+environment where multiple sets of credentials are in use.
+
+=head1 BUGS
+
+Please report bugs at https://bugs.launchpad.net/ec2-consistent-snapshot
+
+=head1 CREDITS
+
+Thanks to the following for performing tests on early versions,
+providing feedback, and patches:
+
+  David Erickson
+  Steve Caldwell
+  Gryp
+  Ken Huang
+  Jefferson Noxon
+
+=head1 AUTHOR
+
+Eric Hammond <ehammond@thinksome.com>
+
+=head1 LICENSE
+
+Copyright (C) 2009-2011 Eric Hammond <ehammond@thinksome.com>
+
+Licensed under the Apache License, Version 2.0, see
+http://www.apache.org/licenses/LICENSE-2.0
+
+=cut
