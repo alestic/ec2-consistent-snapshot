@@ -28,7 +28,7 @@ my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
 my $region                     = undef;
 my $ec2_endpoint               = undef;
 my $description                = $Prog;
-my $freeze_filesystem          = undef;
+my @freeze_filesystem          = ();
 my $mysql                      = 0;
 #my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
 my $mysql_defaults_file        = undef;
@@ -60,8 +60,8 @@ GetOptions(
   'region=s'                     => \$region,
   'ec2-endpoint=s'               => \$ec2_endpoint,
   'description=s'                => \$description,
-  'xfs-filesystem=s'             => \$freeze_filesystem,
-  'freeze-filesystem=s'          => \$freeze_filesystem,
+  'xfs-filesystem=s'             => \@freeze_filesystem,
+  'freeze-filesystem=s'          => \@freeze_filesystem,
   'mysql'                        => \$mysql,
   'mysql-defaults-file=s'        => \$mysql_defaults_file,
   'mysql-socket=s'               => \$mysql_socket,
@@ -120,9 +120,9 @@ if ( $pre_freeze_command ) {
 # out on freezable file systems.
 run_command(['sync']);
 
-if ( $freeze_filesystem ) {
-    fs_freeze($freeze_cmd, $freeze_filesystem);
-    $filesystem_frozen = 1;
+if ( scalar @freeze_filesystem > 0 ) {
+  fs_freeze($freeze_cmd, \@freeze_filesystem);
+  $filesystem_frozen = 1;
 }
 
 ebs_snapshot(\@volume_ids, $ec2_endpoint, $description);
@@ -130,7 +130,7 @@ ebs_snapshot(\@volume_ids, $ec2_endpoint, $description);
 exit 0;
 
 END {
-  fs_thaw($freeze_filesystem) if $filesystem_frozen;
+  fs_thaw(\@freeze_filesystem) if $filesystem_frozen;
 
   if ( $post_thaw_command ) {
     run_command([$post_thaw_command]);
@@ -382,13 +382,17 @@ sub sql_timeout_retry {
 sub fs_freeze {
   my ($freeze_cmd, $freeze_filesystem) = @_;
 
-  run_command([$freeze_cmd, '-f', $freeze_filesystem]);
+  for my $filesystem ( @$freeze_filesystem ) {
+    run_command([$freeze_cmd, '-f', $filesystem]);
+  }
 }
 
 sub fs_thaw {
   my ($freeze_filesystem) = @_;
 
-  run_command([$freeze_cmd, '-u', $freeze_filesystem]);
+  for my $filesystem ( @$freeze_filesystem ) {
+    run_command([$freeze_cmd, '-u', $filesystem]);
+  }
 }
 
 # mysql defaults-file

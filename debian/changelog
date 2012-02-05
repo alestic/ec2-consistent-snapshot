@@ -1,3 +1,10 @@
+ec2-consistent-snapshot (0.43) natty; urgency=low
+
+  * Support multiple --freeze-filesystem options
+    (closes: bug#922068)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sun, 05 Feb 2012 02:29:31 -0800
+
 ec2-consistent-snapshot (0.42) natty; urgency=low
 
   * Add support for --pre-freeze and --post-thaw-cmd with patch from
