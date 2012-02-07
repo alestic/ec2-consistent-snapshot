@@ -116,8 +116,8 @@ if ( $pre_freeze_command ) {
 }
 
 # sync may help flush changed blocks, increasing the consistency on
-# un-freezable file systems, and reducing the time the freeze locks changes
-# out on freezable file systems.
+# un-freezable filesystems, and reducing the time the freeze locks changes
+# out on freezable filesystems.
 run_command(['sync']);
 
 if ( scalar @freeze_filesystem > 0 ) {
@@ -552,12 +552,15 @@ name of the program.
 
 =item --xfs-filesystem MOUNTPOINT [OBSOLESCENT form of the same option]
 
-Indicates that the file system at the specified mount point should be
+Indicates that the filesystem at the specified mount point should be
 flushed and frozen during the snapshot. Requires the xfs_freeze or
 fsfreeze program. Note that xfs_freeze is equivalent to fsfreeze and
 works on any filesystems that support freezing, provided the kernel
 you are using supports it. (Linux Ext3/4, ReiserFS, JFS, XFS.)
 fsfreeze comes with newer versions of util-linux.
+
+You may specify this option multiple times if you need to freeze multiple 
+filesystems on the the EBS volume(s).
 
 =item --mysql
 
@@ -641,7 +644,7 @@ EBS volume id(s) for which a snapshot is to be created.
 
 This program creates an EBS snapshot for an Amazon EC2 EBS volume.  To
 help ensure consistent data in the snapshot, it tries to flush and
-freeze the file system first as well as flushing and locking the
+freeze the filesystem(s) first as well as flushing and locking the
 database, if applicable.
 
 Filesystems can be frozen during the snapshot. Prior to Linux kernel
@@ -665,12 +668,12 @@ volume id.
 
 =head1 EXAMPLES
 
-Snapshot a volume with a frozen file system under /vol containing a
+Snapshot a volume with a frozen filesystem under /vol containing a
 MySQL database:
 
  ec2-consistent-snapshot --mysql --freeze-filesystem /vol vol-VOLUMEID
 
-Snapshot a volume mounted with a frozen file system on /var/local but
+Snapshot a volume mounted with a frozen filesystem on /var/local but
 with no MySQL database:
 
  ec2-consistent-snapshot --freeze-filesystem /var/local vol-VOLUMEID
