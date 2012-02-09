@@ -807,6 +807,8 @@ providing feedback, and patches:
   Gryp
   Ken Huang
   Jefferson Noxon
+  Bobb Crosbie
+  Craig Tracey
 
 =head1 AUTHOR
 
@@ -814,7 +816,7 @@ Eric Hammond <ehammond@thinksome.com>
 
 =head1 LICENSE
 
-Copyright (C) 2009-2011 Eric Hammond <ehammond@thinksome.com>
+Copyright (C) 2009-2012 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0, see
 http://www.apache.org/licenses/LICENSE-2.0
