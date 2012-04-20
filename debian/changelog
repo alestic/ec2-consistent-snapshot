@@ -1,3 +1,9 @@
+ec2-consistent-snapshot (0.44) oneiric; urgency=low
+
+  * Merge changes from Diego Salvi to support multiple --description
+
+ -- Eric Hammond <ehammond@thinksome.com>  Tue, 17 Apr 2012 18:56:09 -0700
+
 ec2-consistent-snapshot (0.43) natty; urgency=low
 
   * Support multiple --freeze-filesystem options

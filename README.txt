@@ -42,6 +42,11 @@ OPTIONS
         Specify a description string for the EBS snapshot. Defaults to the
         name of the program.
 
+        You may specify this option multiple times if you need to customize
+        descriptions of multiple volumes snapshots. If specified multiple times
+        descriptions count has to match volumes count and they will be applied
+        on the same order.
+
     --freeze-filesystem MOUNTPOINT
     --xfs-filesystem MOUNTPOINT [OBSOLESCENT form of the same option]
         Indicates that the filesystem at the specified mount point should be
@@ -155,6 +160,13 @@ EXAMPLES
        --region eu-west-1                                         \
        --description "RAID snapshot $(date +'%Y-%m-%d %H:%M:%S')" \
        vol-VOL1 vol-VOL2 vol-VOL3 vol-VOL4
+
+    Snapshot two volumes with customized descriptions:
+
+     ec2-consistent-snapshot                                      \
+       --description "Description 1st Volume"                     \
+       --description "Description 2nd Volume"                     \
+       vol-VOL1 vol-VOL2
 
 ENVIRONMENT
     $AWS_ACCESS_KEY_ID

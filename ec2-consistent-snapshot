@@ -27,7 +27,7 @@ my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
 my $region                     = undef;
 my $ec2_endpoint               = undef;
-my $description                = $Prog;
+my @descriptions               = ();
 my @freeze_filesystem          = ();
 my $mysql                      = 0;
 #my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
@@ -59,7 +59,7 @@ GetOptions(
   'aws-credentials-file=s'       => \$aws_credentials_file,
   'region=s'                     => \$region,
   'ec2-endpoint=s'               => \$ec2_endpoint,
-  'description=s'                => \$description,
+  'description=s'                => \@descriptions,
   'xfs-filesystem=s'             => \@freeze_filesystem,
   'freeze-filesystem=s'          => \@freeze_filesystem,
   'mysql'                        => \$mysql,
@@ -102,6 +102,24 @@ die "$Prog: ERROR: Can't find AWS access key or secret access key"
   unless $aws_access_key_id and $aws_secret_access_key;
 $Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
 
+die "$Prog: ERROR: Descriptions count (", scalar (@descriptions),
+    ") does not match volumes count (", scalar (@volume_ids), ")"
+  if (scalar (@descriptions) > 1 &&
+      scalar (@descriptions) != scalar (@volume_ids) );
+
+if ( scalar (@descriptions) == 0 ) {
+  $Debug and warn "$Prog: Using default snapshot description\n";
+  $descriptions[0] = $Prog;
+}
+
+if ( scalar (@descriptions) == 1 ) {
+  $Debug and warn "$Prog: Using description '$descriptions[0]'"
+                . " for all snapshot descriptions\n";
+  for ( my $index = 1; $index < scalar (@volume_ids); ++$index ) {
+    $descriptions[$index] = $descriptions[0];
+  }
+} 
+
 my $mysql_stopped = undef;
 my $mysql_dbh = undef;
 if ( $mysql_stop ) {
@@ -125,7 +143,7 @@ if ( scalar @freeze_filesystem > 0 ) {
   $filesystem_frozen = 1;
 }
 
-ebs_snapshot(\@volume_ids, $ec2_endpoint, $description);
+ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions);
 
 exit 0;
 
@@ -159,7 +177,7 @@ END {
 #---- METHODS ----
 
 sub ebs_snapshot {
-  my ($volume_ids, $ec2_endpoint, $description) = @_;
+  my ($volume_ids, $ec2_endpoint, $descriptions) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": create EC2 object\n";
   $Debug and warn "$Prog: Endpoint: $ec2_endpoint\n" if $ec2_endpoint;
@@ -173,7 +191,12 @@ sub ebs_snapshot {
   );
 
  VOLUME:
-  for my $volume_id ( @$volume_ids ) {
+  for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
+    my $volume_id = $$volume_ids[$index];
+    my $description = $$descriptions[$index];
+
+    $Debug and warn "$Prog: volume_id: $volume_id; description: $description\n";
+
     # Snapshot
     $Debug and
       warn "$Prog: ", scalar localtime, ": ec2-create-snapshot $volume_id\n";
@@ -548,6 +571,11 @@ Specify a different EC2 region like "eu-west-1".  Defaults to
 Specify a description string for the EBS snapshot.  Defaults to the
 name of the program.
 
+You may specify this option multiple times if you need to customize
+descriptions of multiple volumes snapshots. If specified multiple
+times descriptions count has to match volumes count and they will be
+applied on the same order.
+
 =item  --freeze-filesystem MOUNTPOINT
 
 =item --xfs-filesystem MOUNTPOINT [OBSOLESCENT form of the same option]
@@ -683,10 +711,17 @@ saving the snapshots with a description marking the current time:
 
  ec2-consistent-snapshot                                      \
    --mysql                                                    \
-   --freeze-filesystem /vol                                      \
+   --freeze-filesystem /vol                                   \
    --region eu-west-1                                         \
    --description "RAID snapshot $(date +'%Y-%m-%d %H:%M:%S')" \
    vol-VOL1 vol-VOL2 vol-VOL3 vol-VOL4
+
+Snapshot two volumes with customized descriptions:
+
+ ec2-consistent-snapshot                                      \
+   --description "Description 1st Volume"                     \
+   --description "Description 2nd Volume"                     \
+   vol-VOL1 vol-VOL2
 
 =head1 ENVIRONMENT
 
@@ -809,6 +844,7 @@ providing feedback, and patches:
   Jefferson Noxon
   Bobb Crosbie
   Craig Tracey
+  Diego Salvi
 
 =head1 AUTHOR
 
