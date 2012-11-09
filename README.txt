@@ -43,9 +43,9 @@ OPTIONS
         name of the program.
 
         You may specify this option multiple times if you need to customize
-        descriptions of multiple volumes snapshots. If specified multiple times
-        descriptions count has to match volumes count and they will be applied
-        on the same order.
+        descriptions of multiple volumes snapshots. If specified multiple
+        times descriptions count has to match volumes count and they will be
+        applied on the same order.
 
     --freeze-filesystem MOUNTPOINT
     --xfs-filesystem MOUNTPOINT [OBSOLESCENT form of the same option]
@@ -156,7 +156,7 @@ EXAMPLES
 
      ec2-consistent-snapshot                                      \
        --mysql                                                    \
-       --freeze-filesystem /vol                                      \
+       --freeze-filesystem /vol                                   \
        --region eu-west-1                                         \
        --description "RAID snapshot $(date +'%Y-%m-%d %H:%M:%S')" \
        vol-VOL1 vol-VOL2 vol-VOL3 vol-VOL4
@@ -264,13 +264,23 @@ CREDITS
       Jefferson Noxon
       Bobb Crosbie
       Craig Tracey
+      Diego Salvi
 
 AUTHOR
     Eric Hammond <ehammond@thinksome.com>
 
 LICENSE
-    Copyright (C) 2009-2012 Eric Hammond <ehammond@thinksome.com>
+    Copyright 2009-2012 Eric Hammond <ehammond@thinksome.com>
 
-    Licensed under the Apache License, Version 2.0, see
-    http://www.apache.org/licenses/LICENSE-2.0
+    Licensed under the Apache License, Version 2.0 (the "License"); you may
+    not use this file except in compliance with the License. You may obtain
+    a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
 
