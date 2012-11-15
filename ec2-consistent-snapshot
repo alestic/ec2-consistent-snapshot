@@ -246,12 +246,12 @@ sub mysql_connect {
 
   if ( defined($mysql_defaults_file) )
   {
-    ($mysql_host, $mysql_username, $mysql_password) = read_mydefaultsfile(
+    ($mysql_host, $mysql_username, $mysql_password, $mysql_socket) = read_mydefaultsfile(
       $mysql_defaults_file,
     );
   } else {
-    ($mysql_host, $mysql_username, $mysql_password) = read_mycnf(
-      $mysql_host, $mysql_username, $mysql_password,
+    ($mysql_host, $mysql_username, $mysql_password, $mysql_socket) = read_mycnf(
+      $mysql_host, $mysql_username, $mysql_password, $mysql_socket
     );
   }
   if( defined($mysql_socket) ) {
@@ -431,18 +431,20 @@ sub read_mydefaultsfile {
                         and not defined $mysql_username;
     $mysql_password = $1 if $line =~ m%^\s*password\s*=\s*"?(\S+?)"?$%
                         and not defined $mysql_password;
+    $mysql_socket   = $1 if $line =~ m%^\s*socket\s*=\s*"?(\S+?)"?$%
+                        and not defined $mysql_socket;
   }
   close(MYCNF);
 
-  return ($mysql_host, $mysql_username, $mysql_password);
+  return ($mysql_host, $mysql_username, $mysql_password, $mysql_socket);
 }
 
 # Look for the MySQL username/password in $HOME/.my.cnf
 sub read_mycnf {
-  my ($mysql_host, $mysql_username, $mysql_password) = @_;
+  my ($mysql_host, $mysql_username, $mysql_password, $mysql_socket) = @_;
 
   open(MYCNF, "$ENV{HOME}/.my.cnf")
-    or return($mysql_host, $mysql_username, $mysql_password);
+    or return($mysql_host, $mysql_username, $mysql_password, $mysql_socket);
   while ( defined (my $line = <MYCNF>) ) {
     $mysql_host     = $1 if $line =~ m%^\s*host\s*=\s*"?(\S+?)"?$%
                         and not defined $mysql_host;
@@ -450,10 +452,12 @@ sub read_mycnf {
                         and not defined $mysql_username;
     $mysql_password = $1 if $line =~ m%^\s*password\s*=\s*"?(\S+?)"?$%
                         and not defined $mysql_password;
+    $mysql_socket   = $1 if $line =~ m%^\s*socket\s*=\s*"?(\S+?)"?$%
+                        and not defined $mysql_socket;
   }
   close(MYCNF);
 
-  return ($mysql_host, $mysql_username, $mysql_password);
+  return ($mysql_host, $mysql_username, $mysql_password, $mysql_socket);
 }
 
 
@@ -845,6 +849,7 @@ providing feedback, and patches:
   Bobb Crosbie
   Craig Tracey
   Diego Salvi
+  Christian Marquardt
 
 =head1 AUTHOR
 
