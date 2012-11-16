@@ -1,3 +1,10 @@
+ec2-consistent-snapshot (0.46) precise; urgency=low
+
+  * Add libdbd-mysql-perl as a dependency, thanks to Christian Marquardt.
+    (fixes #5 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Thu, 15 Nov 2012 16:14:13 -0800
+
 ec2-consistent-snapshot (0.45) precise; urgency=low
 
   * Merge patch from Christian Marquardt to support "socket"

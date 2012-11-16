@@ -9,7 +9,7 @@ Vcs-Bzr: http://bazaar.launchpad.net/~alestic/ec2-consistent-snapshot/trunk/
 
 Package: ec2-consistent-snapshot
 Architecture: all
-Depends: ${misc:Depends}, xfsprogs, perl, libnet-amazon-ec2-perl, libfile-slurp-perl, libwww-perl, libdigest-hmac-perl, libparams-validate-perl, libxml-simple-perl, libmoose-perl, libcrypt-ssleay-perl
+Depends: ${misc:Depends}, xfsprogs, perl, libnet-amazon-ec2-perl, libfile-slurp-perl, libwww-perl, libdigest-hmac-perl, libparams-validate-perl, libxml-simple-perl, libmoose-perl, libcrypt-ssleay-perl, libdbd-mysql-perl
 Description: Initiate consistent EBS snapshots in Amazon EC2
  The "ec2-consistent-snapshot" command can be used to initiate
  EBS (elastic block volume) snapshots in Amazon EC2.  In particular,
