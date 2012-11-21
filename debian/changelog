@@ -1,3 +1,11 @@
+ec2-consistent-snapshot (0.47) quantal; urgency=low
+
+  * Don't output slave information for a slave promoted to master.
+    Patch provided by Todd Roman.
+    (closes: bug#922068 on launchpad)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Wed, 21 Nov 2012 14:53:01 -0800
+
 ec2-consistent-snapshot (0.46) precise; urgency=low
 
   * Add libdbd-mysql-perl as a dependency, thanks to Christian Marquardt.
@@ -9,7 +17,7 @@ ec2-consistent-snapshot (0.45) precise; urgency=low
 
   * Merge patch from Christian Marquardt to support "socket"
     option in MySQL configuration file.
-    (fixes github #6)
+    (fixes #6 on github)
 
  -- Eric Hammond <ehammond@thinksome.com>  Thu, 15 Nov 2012 15:56:08 -0800
 
