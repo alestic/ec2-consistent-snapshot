@@ -1,3 +1,9 @@
+ec2-consistent-snapshot (0.48) UNRELEASED; urgency=low
+
+  * Moving packagaing from bzr to git
+
+ -- Eric Hammond <ehammond@thinksome.com>  Wed, 21 Nov 2012 17:17:17 -0800
+
 ec2-consistent-snapshot (0.47) quantal; urgency=low
 
   * Don't output slave information for a slave promoted to master.

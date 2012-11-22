@@ -5,7 +5,7 @@ Maintainer: Eric Hammond <ehammond@thinksome.com>
 Build-Depends: cdbs, debhelper (>= 7)
 Standards-Version: 3.8.0
 Homepage: http://launchpad.net/ec2-consistent-snapshot
-Vcs-Bzr: http://bazaar.launchpad.net/~alestic/ec2-consistent-snapshot/trunk/
+Vcs-Git: git@github.com:alestic/ec2-consistent-snapshot.git
 
 Package: ec2-consistent-snapshot
 Architecture: all
