@@ -265,6 +265,8 @@ CREDITS
       Bobb Crosbie
       Craig Tracey
       Diego Salvi
+      Christian Marquardt
+      Todd Roman
 
 AUTHOR
     Eric Hammond <ehammond@thinksome.com>
