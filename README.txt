@@ -104,10 +104,10 @@ OPTIONS
         How many seconds to sleep between database lock tries. Defaults to
         5.0.
 
-    --pre-freeze-cmd COMMAND
+    --pre-freeze-command COMMAND
         Command to run after MySQL stop/lock and before filesystem freeze.
 
-    --post-thaw-cmd COMMAND
+    --post-thaw-command COMMAND
         Command to run immediately after filesystem unfreeze and before
         MySQL start/unlock.
 
