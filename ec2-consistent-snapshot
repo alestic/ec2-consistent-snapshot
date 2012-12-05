@@ -217,7 +217,9 @@ sub ebs_snapshot {
     };
     ualarm(0);
     if ( $@  ){
-      warn "$Prog: ERROR: create_snapshot: $@";
+      my $error_code    = $@->errors->[0]->code;
+      my $error_message = $@->errors->[0]->message;
+      warn "$Prog: ERROR: create_snapshot: $error_code: $error_message";
       return undef;
     }
 
