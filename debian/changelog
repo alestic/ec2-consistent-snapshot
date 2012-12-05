@@ -1,8 +1,11 @@
-ec2-consistent-snapshot (0.48) UNRELEASED; urgency=low
+ec2-consistent-snapshot (0.48) quantal; urgency=low
 
   * Moving packagaing from bzr to git
+  * Fix documentation for --pre-freeze-cmd & --post-thaw-cmd to match code.
+    Patch provided by Ben Tucker.
+    Fixes #7 on github
 
- -- Eric Hammond <ehammond@thinksome.com>  Wed, 21 Nov 2012 17:17:17 -0800
+ -- Eric Hammond <ehammond@thinksome.com>  Wed, 05 Dec 2012 13:33:36 -0800
 
 ec2-consistent-snapshot (0.47) quantal; urgency=low
 
