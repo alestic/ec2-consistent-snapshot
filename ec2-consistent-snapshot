@@ -47,10 +47,10 @@ my $post_thaw_command          = undef;
 
 Getopt::Long::config('no_ignore_case');
 GetOptions(
-  'help|?'                       => \$Help,
-  'debug'                        => \$Debug,
-  'quiet'                        => \$Quiet,
-  'noaction'                     => \$Noaction,
+  'help|h|?'                     => \$Help,
+  'debug|d'                      => \$Debug,
+  'quiet|q'                      => \$Quiet,
+  'noaction|n'                   => \$Noaction,
 
   'aws-access-key-id=s'          => \$aws_access_key_id,
   'aws-secret-access-key=s'      => \$aws_secret_access_key,
