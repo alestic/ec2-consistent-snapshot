@@ -841,7 +841,7 @@ Please report bugs at https://bugs.launchpad.net/ec2-consistent-snapshot
 =head1 CREDITS
 
 Thanks to the following for performing tests on early versions,
-providing feedback, and patches:
+providing feedback, bug reports, and patches:
 
   David Erickson
   Steve Caldwell
@@ -854,6 +854,7 @@ providing feedback, and patches:
   Christian Marquardt
   Todd Roman
   Ben Tucker
+  David Rogeres
 
 =head1 AUTHOR
 
