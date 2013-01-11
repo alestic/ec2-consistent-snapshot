@@ -1,3 +1,9 @@
+ec2-consistent-snapshot (0.51) quantal; urgency=low
+
+  * Support different versions of Net::Amazon::EC2 error message formats
+
+ -- Eric Hammond <ehammond@thinksome.com>  Thu, 10 Jan 2013 17:14:06 -0800
+
 ec2-consistent-snapshot (0.50) quantal; urgency=low
 
   * Fix error message extraction from Net::Amazon::EC2

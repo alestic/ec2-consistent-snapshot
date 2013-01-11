@@ -217,9 +217,7 @@ sub ebs_snapshot {
     };
     ualarm(0);
     if ( $@  ){
-      my $error_code    = $@->errors->[0]->code;
-      my $error_message = $@->errors->[0]->message;
-      warn "$Prog: ERROR: create_snapshot: $error_code: $error_message";
+      warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
       return undef;
     }
 
@@ -517,6 +515,18 @@ sub run_command {
     system(@$command) and die "failed($?)\n";
   };
   warn "$Prog: ERROR: @$command: $@" if $@;
+}
+
+
+# Support error formats from different versions of Net::Amazon::EC2
+sub ec2_error_message {
+    my ($error) = @_;
+
+    if ( ref $error && ref $error->errors eq 'ARRAY' ) {
+        $error = join("\n", map {$_->code.': '.$_->message} @{$error->errors});
+    }
+
+    return $error;
 }
 
 
