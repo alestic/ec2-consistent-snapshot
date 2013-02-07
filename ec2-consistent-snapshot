@@ -20,8 +20,8 @@ my $Debug                      = 0;
 my $Quiet                      = 0;
 my $Noaction                   = 0;
 
-my $aws_access_key_id          = $ENV{AWS_ACCESS_KEY_ID};
-my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY};
+my $aws_access_key_id          = $ENV{AWS_ACCESS_KEY_ID} || $ENV{AWS_ACCESS_KEY};
+my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY} || $ENV{AWS_SECRET_KEY};
 my $aws_access_key_id_file     = $ENV{AWS_ACCESS_KEY_ID};
 my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
