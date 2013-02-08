@@ -59,6 +59,22 @@ OPTIONS
         You may specify this option multiple times if you need to freeze
         multiple filesystems on the the EBS volume(s).
 
+    --mongo
+        Indicates that the volume contains data files for a running Mongo
+        database, which will be flushed and locked during the snapshot.
+
+    --mongo-host HOST
+    --mongo-port PORT
+    --mongo-username USER
+    --mongo-password PASS
+        Mongo host, port, username, and password used to flush logs if there
+        is authentication required on the admin database.
+
+    --mongo-stop
+        Indicates that the volume contains data files for a running Mongo
+        instance.  The instance is shutdown before the snapshot is initiated
+        and restarted afterwards. [EXPERIMENTAL]
+
     --mysql
         Indicates that the volume contains data files for a running MySQL
         database, which will be flushed and locked during the snapshot.
@@ -169,11 +185,11 @@ EXAMPLES
        vol-VOL1 vol-VOL2
 
 ENVIRONMENT
-    $AWS_ACCESS_KEY_ID
+    $AWS_ACCESS_KEY_ID or $AWS_ACCESS_KEY
         Default value for access key. Can be overridden by command line
         options.
 
-    $AWS_SECRET_ACCESS_KEY
+    $AWS_SECRET_ACCESS_KEY or $AWS_SECRET_KEY
         Default value for secret access key. Can be overridden by command
         line options.
 
@@ -201,15 +217,17 @@ INSTALLATION
      sudo apt-get update
      sudo apt-get install ec2-consistent-snapshot
 
-    This program may also require the installation of the Net::Amazon::EC2
-    Perl package from CPAN. On Ubuntu 10.04 Lucid and higher, this should
-    happen automatically by the dependency on the libnet-amazon-ec2-perl
-    package.
+    This program may also require the installation of the Net::Amazon::EC2,
+    MongoDB::Admin, and Any::Moose Perl packages from CPAN. On Ubuntu 10.04
+    Lucid and higher, this should happen automatically by the dependency on
+    the libnet-amazon-ec2-perl package.
 
-    On some earlier releases of Ubuntu you can install the required package
-    with the following command:
+    On some earlier releases of Ubuntu you can install the required packages
+    with the following commands:
 
      sudo PERL_MM_USE_DEFAULT=1 cpan Net::Amazon::EC2
+     sudo PERL_MM_USE_DEFAULT=1 cpan -fi MongoDB MongoDB::Admin
+     sudo PERL_MM_USE_DEFAULT=1 cpan -fi Any Any::Moose
 
     On Ubuntu 8.04 Hardy, use the following commands instead:
 
@@ -220,6 +238,8 @@ INSTALLATION
      sudo apt-get update
      sudo apt-get install ec2-consistent-snapshot build-essential
      sudo cpan Net::Amazon::EC2
+     sudo cpan MongoDB::Admin
+     sudo cpan Any::Moose
 
     The default values can be accepted for most of the prompts, though it is
     necessary to select a CPAN mirror on Hardy.
@@ -230,8 +250,8 @@ SEE ALSO
     ec2-create-snapshot
 
 CAVEATS
-    This program currently supports the MySQL database. Patches are welcomed
-    for other databases.
+    This program currently supports the MySQL and MongoDB databases. Patches
+    are welcomed for other databases.
 
     EBS snapshots are a critical part of protecting your valuable data. This
     program or the environment in which it is run may contain defects that
@@ -267,6 +287,8 @@ CREDITS
       Diego Salvi
       Christian Marquardt
       Todd Roman
+      Eric Lubow
+      Kevin Lewis
 
 AUTHOR
     Eric Hammond <ehammond@thinksome.com>
