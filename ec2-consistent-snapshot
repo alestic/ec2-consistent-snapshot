@@ -8,6 +8,8 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use File::Slurp;
+use IO::Socket::SSL;
+eval 'use Mozilla::CA';
 use Time::HiRes qw(ualarm usleep);
 use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
@@ -29,6 +31,12 @@ my $region                     = undef;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
 my @freeze_filesystem          = ();
+my $mongo                      = 0;
+my $mongo_username             = undef;
+my $mongo_password             = undef;
+my $mongo_host                 = undef;
+my $mongo_port                 = 27017;
+my $mongo_stop                 = 0;
 my $mysql                      = 0;
 #my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
 my $mysql_defaults_file        = undef;
@@ -44,6 +52,7 @@ my $lock_tries                 = 60;
 my $lock_sleep                 =  5.0; # seconds
 my $pre_freeze_command         = undef;
 my $post_thaw_command          = undef;
+my $init_script                = '/etc/init.d/mongod';
 
 Getopt::Long::config('no_ignore_case');
 GetOptions(
@@ -62,6 +71,12 @@ GetOptions(
   'description=s'                => \@descriptions,
   'xfs-filesystem=s'             => \@freeze_filesystem,
   'freeze-filesystem=s'          => \@freeze_filesystem,
+  'mongo'                        => \$mongo,
+  'mongo-username=s'             => \$mongo_username,
+  'mongo-password=s'             => \$mongo_password,
+  'mongo-host=s'                 => \$mongo_host,
+  'mongo-port=s'                 => \$mongo_port,
+  'mongo-stop'                   => \$mongo_stop,
   'mysql'                        => \$mysql,
   'mysql-defaults-file=s'        => \$mysql_defaults_file,
   'mysql-socket=s'               => \$mysql_socket,
@@ -76,6 +91,7 @@ GetOptions(
   'lock-sleep=s'                 => \$lock_sleep,
   'pre-freeze-command=s'         => \$pre_freeze_command,
   'post-thaw-command=s'          => \$post_thaw_command,
+  'init=s'                       => \$init_script,
 ) or pod2usage(2);
 
 my $filesystem_frozen = 0;
@@ -120,6 +136,21 @@ if ( scalar (@descriptions) == 1 ) {
   }
 } 
 
+#
+# Mongo
+#
+my $mongo_stopped = undef;
+my $mongo_dbh = undef;
+if ( $mongo_stop ) {
+  $mongo_stopped = mongo_stop();
+} elsif ( $mongo ) {
+  $mongo_dbh = mongo_connect($mongo_host, $mongo_port, $mongo_username, $mongo_password);
+  mongo_lock($mongo_dbh);
+}
+
+#
+# MySQL
+#
 my $mysql_stopped = undef;
 my $mysql_dbh = undef;
 if ( $mysql_stop ) {
@@ -161,6 +192,13 @@ END {
       unlink $mysql_master_status_file
         or die "$Prog: Couldn't remove file: $mysql_master_status_file: $!\n";
     }
+  }
+
+  if ( $mongo_stopped ) {
+    mongo_start();
+  } elsif ( $mongo_dbh ) {
+    mongo_unlock($mongo_dbh);
+    # We don't need to disconnect with the MongoDB module
   }
 
   if ( $mysql_stopped ) {
@@ -237,6 +275,97 @@ sub ebs_snapshot {
   }
 }
 
+#
+# Mongo
+#
+sub mongo_connect {
+  my ($mongo_host, $mongo_port, $mongo_username, $mongo_password) = @_;
+
+  use MongoDB;
+  use MongoDB::Database;
+  use MongoDB::Admin;
+  use DateTime::Locale;
+  use DateTime::TimeZone;
+
+  $mongo_host ||= 'localhost';
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": mongo connect on ${mongo_host}:${mongo_port}\n";
+
+  my $mongo_conn = MongoDB::Connection->new(host => "${mongo_host}:${mongo_port}")
+    or die "$Prog: ERROR: Unable to connect to mongo"
+         . " on $mongo_host";
+
+  if (defined $mongo_username && defined $mongo_password) {
+    $mongo_conn->authenticate('admin', $mongo_username, $mongo_password)
+      or die "$Prog: ERROR: Unable to connect to mongo"
+           . " on $mongo_host as $mongo_username";
+  }
+
+  my $mongo_dbh = MongoDB::Admin->new(connection => $mongo_conn)
+    or die "$Prog: ERROR: Unable to get Mongo admin connection"
+           . " on $mongo_host";
+
+  return $mongo_dbh;
+}
+
+sub mongo_lock {
+  my ($mongo_dbh) = @_;
+
+  # Don't worry about retry since Mongo has reconnect option on by default
+  $Debug and warn "$Prog: ", scalar localtime, ": locking mongo\n";
+
+  if ( $Noaction ) {
+    warn "mongo lock SKIPPED (--noaction)\n";
+  }
+  $mongo_dbh->fsync_lock();
+
+  $Debug and warn "$Prog: ", scalar localtime, ": mongo locked\n";
+
+  return 1;
+}
+
+sub mongo_unlock {
+  my ($mongo_dbh) = @_;
+
+  # Don't worry about retry since Mongo has reconnect option on by default
+  $Debug and warn "$Prog: ", scalar localtime, ": unlocking mongo\n";
+
+  if ( $Noaction ) {
+    warn "mongo unlock SKIPPED (--noaction)\n";
+  }
+  $mongo_dbh->unlock();
+
+  $Debug and warn "$Prog: ", scalar localtime, ": mongo unlocked\n";
+
+}
+
+sub mongo_stop {
+  $Debug and warn "$Prog: ", scalar localtime, ": mongo stop\n";
+
+  my $result = system($init_script, 'stop');
+
+  if ( $result != 0 ) {
+    die "$Prog: Unable to stop mongod: $? $!";
+  }
+
+  return 1;
+}
+
+sub mongo_start {
+  $Debug and warn "$Prog: ", scalar localtime, ": mongo start\n";
+
+  my $result = system($init_script, 'start');
+
+  if ( $result != 0 ) {
+    warn "$Prog: Unable to start mongod: $? $!";
+  }
+}
+
+
+#
+# MySQL
+#
 sub mysql_connect {
   my ($mysql_host, $mysql_socket, $mysql_username, $mysql_password) = @_;
   my $dsn_extra = "";
@@ -608,6 +737,28 @@ fsfreeze comes with newer versions of util-linux.
 You may specify this option multiple times if you need to freeze multiple 
 filesystems on the the EBS volume(s).
 
+=item --mongo
+
+Indicates that the volume contains data files for a running Mongo
+database, which will be flushed and locked during the snapshot.
+
+=item --mongo-host HOST
+ 
+=item --mongo-port PORT
+
+=item --mongo-username USER
+
+=item --mongo-password PASS
+
+Mongo host, port, username, and password used to flush logs if there
+is authentication required on the admin database.
+
+=item --mongo-stop
+
+Indicates that the volume contains data files for a running Mongo
+instance.  The instance is shutdown before the snapshot is initiated
+and restarted afterwards. [EXPERIMENTAL]
+
 =item --mysql
 
 Indicates that the volume contains data files for a running MySQL
@@ -719,6 +870,11 @@ MySQL database:
 
  ec2-consistent-snapshot --mysql --freeze-filesystem /vol vol-VOLUMEID
 
+Snapshot a volume with a frozen filesystem under /data containing a
+Mongo database:
+
+ ec2-consistent-snapshot --mongo --freeze-filesystem /data vol-VOLUMEID
+
 Snapshot a volume mounted with a frozen filesystem on /var/local but
 with no MySQL database:
 
@@ -731,6 +887,16 @@ saving the snapshots with a description marking the current time:
    --mysql                                                    \
    --freeze-filesystem /vol                                   \
    --region eu-west-1                                         \
+   --description "RAID snapshot $(date +'%Y-%m-%d %H:%M:%S')" \
+   vol-VOL1 vol-VOL2 vol-VOL3 vol-VOL4
+
+Snapshot four us-east-1 volumes in a RAID configuration with Mongo,
+saving the snapshots with a description marking the current time:
+
+ ec2-consistent-snapshot                                      \
+   --mongo                                                    \
+   --freeze-filesystem /data                                  \
+   --region us-east-1                                         \
    --description "RAID snapshot $(date +'%Y-%m-%d %H:%M:%S')" \
    vol-VOL1 vol-VOL2 vol-VOL3 vol-VOL4
 
