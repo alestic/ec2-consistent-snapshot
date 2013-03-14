@@ -22,8 +22,8 @@ my $Debug                      = 0;
 my $Quiet                      = 0;
 my $Noaction                   = 0;
 
-my $aws_access_key_id          = $ENV{AWS_ACCESS_KEY_ID} || $ENV{AWS_ACCESS_KEY};
-my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY} || $ENV{AWS_SECRET_KEY};
+my $aws_access_key_id          = $ENV{AWS_ACCESS_KEY_ID};
+my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_access_key_id_file     = $ENV{AWS_ACCESS_KEY_ID};
 my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
@@ -52,7 +52,7 @@ my $lock_tries                 = 60;
 my $lock_sleep                 =  5.0; # seconds
 my $pre_freeze_command         = undef;
 my $post_thaw_command          = undef;
-my $init_script                = '/etc/init.d/mongod';
+my $mongo_init_script                = '/etc/init.d/mongod';
 
 Getopt::Long::config('no_ignore_case');
 GetOptions(
@@ -91,7 +91,7 @@ GetOptions(
   'lock-sleep=s'                 => \$lock_sleep,
   'pre-freeze-command=s'         => \$pre_freeze_command,
   'post-thaw-command=s'          => \$post_thaw_command,
-  'init=s'                       => \$init_script,
+  'mongo-init=s'                       => \$mongo_init_script,
 ) or pod2usage(2);
 
 my $filesystem_frozen = 0;
@@ -343,7 +343,7 @@ sub mongo_unlock {
 sub mongo_stop {
   $Debug and warn "$Prog: ", scalar localtime, ": mongo stop\n";
 
-  my $result = system($init_script, 'stop');
+  my $result = system($mongo_init_script, 'stop');
 
   if ( $result != 0 ) {
     die "$Prog: Unable to stop mongod: $? $!";
@@ -355,7 +355,7 @@ sub mongo_stop {
 sub mongo_start {
   $Debug and warn "$Prog: ", scalar localtime, ": mongo start\n";
 
-  my $result = system($init_script, 'start');
+  my $result = system($mongo_init_script, 'start');
 
   if ( $result != 0 ) {
     warn "$Prog: Unable to start mongod: $? $!";
