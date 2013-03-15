@@ -185,11 +185,11 @@ EXAMPLES
        vol-VOL1 vol-VOL2
 
 ENVIRONMENT
-    $AWS_ACCESS_KEY_ID or $AWS_ACCESS_KEY
+    $AWS_ACCESS_KEY_ID
         Default value for access key. Can be overridden by command line
         options.
 
-    $AWS_SECRET_ACCESS_KEY or $AWS_SECRET_KEY
+    $AWS_SECRET_ACCESS_KEY
         Default value for secret access key. Can be overridden by command
         line options.
 
