@@ -13,6 +13,9 @@ eval 'use Mozilla::CA';
 use Time::HiRes qw(ualarm usleep);
 use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
+use DateTime::Locale;
+use DateTime::TimeZone;
+
 my $SIGALRM = 14;
 
 #---- OPTIONS ----
@@ -281,11 +284,12 @@ sub ebs_snapshot {
 sub mongo_connect {
   my ($mongo_host, $mongo_port, $mongo_username, $mongo_password) = @_;
 
-  use MongoDB;
-  use MongoDB::Database;
-  use MongoDB::Admin;
-  use DateTime::Locale;
-  use DateTime::TimeZone;
+  require MongoDB;
+  MongoDB->import;
+  require MongoDB::Database;
+  MongoDB::Database->import;
+  require MongoDB::Admin;
+  MongoDB::Admin->import;
 
   $mongo_host ||= 'localhost';
 
