@@ -1037,6 +1037,8 @@ providing feedback, bug reports, and patches:
   Todd Roman
   Ben Tucker
   David Rogeres
+  Kevin Lewis
+  Eric Lubow
 
 =head1 AUTHOR
 
@@ -1044,7 +1046,7 @@ Eric Hammond <ehammond@thinksome.com>
 
 =head1 LICENSE
 
-Copyright 2009-2012 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2013 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
