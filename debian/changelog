@@ -1,3 +1,10 @@
+ecconsistent-snapshot (0.53) quantal; urgency=low
+
+  * Add some dependencies on Perl packages.  
+  * Don't require MongoDB unless it is used.
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 06 Apr 2013 18:30:47 -0700
+
 ec2-consistent-snapshot (0.52) quantal; urgency=low
 
   * Add MongoDB support, thanks to Kevin Lewis, Eric Lubow.
