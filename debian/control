@@ -13,5 +13,6 @@ Depends: ${misc:Depends}, xfsprogs, perl, libnet-amazon-ec2-perl, libfile-slurp-
 Description: Initiate consistent EBS snapshots in Amazon EC2
  The "ec2-consistent-snapshot" command can be used to initiate
  EBS (elastic block volume) snapshots in Amazon EC2.  In particular,
- it can take steps like flushing and locking a MySQL database and
- flushing and freezing an XFS file system during the snapshot.
+ it can take steps like flushing and locking a MySQL or MongoDB
+ database and flushing and freezing an XFS file system during the
+ snapshot.

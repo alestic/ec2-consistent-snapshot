@@ -1,3 +1,9 @@
+ec2-consistent-snapshot (0.55) quantal; urgency=low
+
+  * Note MongoDB support in package description (debian/control)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 06 Apr 2013 18:47:26 -0700
+
 ec2-consistent-snapshot (0.54) quantal; urgency=low
 
   * Credit where credit is due.
