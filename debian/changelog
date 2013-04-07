@@ -1,3 +1,9 @@
+ec2-consistent-snapshot (0.52) quantal; urgency=low
+
+  * Add MongoDB support, thanks to Kevin Lewis, Eric Lubow.
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 06 Apr 2013 18:19:13 -0700
+
 ec2-consistent-snapshot (0.51) quantal; urgency=low
 
   * Support different versions of Net::Amazon::EC2 error message formats
