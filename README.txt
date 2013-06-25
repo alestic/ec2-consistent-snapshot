@@ -18,6 +18,9 @@ OPTIONS
     -n --noaction
         Don't do it. Just say what you would have done.
 
+    -a --auto-discovery
+        Enable auto discovery of mounted volume-ids for current instance.
+
     --aws-access-key-id KEY
     --aws-secret-access-key SECRET
         Amazon AWS access key and secret access key. Defaults to environment
@@ -36,7 +39,7 @@ OPTIONS
 
     --region REGION
         Specify a different EC2 region like "eu-west-1". Defaults to
-        "us-east-1".
+        $AWS_DEFAULT_REGION environment variable or "us-east-1" if empty.
 
     --description DESCRIPTION
         Specify a description string for the EBS snapshot. Defaults to the
@@ -166,6 +169,11 @@ EXAMPLES
     with no MySQL database:
 
      ec2-consistent-snapshot --freeze-filesystem /var/local vol-VOLUMEID
+
+    Snapshot with auto discovery mode, i.e. all mounted volumes are snapshotted
+    automatically using enviroment AWS settings
+
+     ec2-consistent-snapshot --auto-discovery
 
     Snapshot four European volumes in a RAID configuration with MySQL,
     saving the snapshots with a description marking the current time:
