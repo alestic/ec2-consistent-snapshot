@@ -26,6 +26,7 @@ my $Debug                      = 0;
 my $Quiet                      = 0;
 my $Noaction                   = 0;
 my $AutoDiscover               = 0;
+my $AutoFreeze                 = 0;
 
 my $aws_access_key_id          = $ENV{AWS_ACCESS_KEY_ID};
 my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY};
@@ -66,6 +67,7 @@ GetOptions(
   'quiet|q'                      => \$Quiet,
   'noaction|n'                   => \$Noaction,
   'auto-discover|a'              => \$AutoDiscover,
+  'auto-freeze|f'                => \$AutoFreeze,
 
   'aws-access-key-id=s'          => \$aws_access_key_id,
   'aws-secret-access-key=s'      => \$aws_secret_access_key,
@@ -108,8 +110,8 @@ my @volume_ids = @ARGV;
 
 $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 
-# Autodetect mounted volume ids
-ebs_discover(\@volume_ids, $ec2_endpoint) if $AutoDiscover;
+# Autodetect mounted volume ids and optionally mark them to be frozen
+ebs_discover(\@volume_ids, $ec2_endpoint, \@freeze_filesystem) if $AutoDiscover;
 
 pod2usage(2) unless scalar @volume_ids;
 
@@ -289,7 +291,7 @@ sub ebs_snapshot {
 # Auto discover instance mounted volumes
 #
 sub ebs_discover {
-  my ($volume_ids, $ec2_endpoint) = @_;
+  my ($volume_ids, $ec2_endpoint, $freeze_filesystem) = @_;
   
   $Debug and warn "$Prog: ", scalar localtime, ": auto discovering instance id\n";
   
@@ -311,11 +313,32 @@ sub ebs_discover {
   
   # Add discovered volume ids to given volume ids which should be an empty array
   foreach my $device (@{$response->block_device_mapping}) {
-    $Debug and warn "$Prog: ", scalar localtime, ": found volume " . $device->ebs->volume_id . " mounted at " . $device->device_name . "\n";
+    $Debug and warn "$Prog: ", scalar localtime, ": found volume " . $device->ebs->volume_id . " with device name " . $device->device_name . "\n";
     push(@$volume_ids, $device->ebs->volume_id);
+    # Optionally add mounted filesystem to freeze list
+    if ($AutoFreeze && (my $mountPoint = fs_mount_point($device->device_name))) {
+      $Debug and warn "$Prog: ", scalar localtime, ": " . $mountPoint . 
+        " filesystem automatically added to freeze list for volume " . $device->ebs->volume_id . "\n";
+      push(@$freeze_filesystem, $mountPoint);
+    }
   }
   
   return 1;
+}
+
+#
+# Convert device to mount point using /etc/mtab table
+# 
+sub fs_mount_point {
+  my ($device) = @_;
+  (my $xvDevice = $device) =~ s/sd/xvd/;
+  
+  # Try with the given device name
+  my $mountPoint = `cat /etc/mtab | grep $device | awk '{print \$2}'`;
+  # Try with xvd filename used when linux xvd module is present
+  $mountPoint ||= `cat /etc/mtab | grep $xvDevice | awk '{print \$2}'`;
+  # Return found mount point or nothing
+  return $mountPoint;
 }
 
 #

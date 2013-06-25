@@ -21,6 +21,9 @@ OPTIONS
     -a --auto-discovery
         Enable auto discovery of mounted volume-ids for current instance.
 
+    -f --auto-freeze
+        Enable auto freeze of mounted filesystem for discovered volumes.
+
     --aws-access-key-id KEY
     --aws-secret-access-key SECRET
         Amazon AWS access key and secret access key. Defaults to environment
@@ -174,6 +177,11 @@ EXAMPLES
     automatically using enviroment AWS settings
 
      ec2-consistent-snapshot --auto-discovery
+
+    Snapshot with auto discovery and auto freeze, i.e. all mounted volumes 
+    are frozen and then snapshotted automatically.
+
+     ec2-consistent-snapshot --auto-discovery --auto-freeze
 
     Snapshot four European volumes in a RAID configuration with MySQL,
     saving the snapshots with a description marking the current time:
