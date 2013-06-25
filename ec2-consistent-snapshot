@@ -12,6 +12,7 @@ use IO::Socket::SSL;
 eval 'use Mozilla::CA';
 use Time::HiRes qw(ualarm usleep);
 use Net::Amazon::EC2 0.11;
+use LWP::Simple;
 use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
@@ -24,6 +25,7 @@ my $Help                       = 0;
 my $Debug                      = 0;
 my $Quiet                      = 0;
 my $Noaction                   = 0;
+my $AutoDiscover               = 0;
 
 my $aws_access_key_id          = $ENV{AWS_ACCESS_KEY_ID};
 my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY};
@@ -63,6 +65,7 @@ GetOptions(
   'debug|d'                      => \$Debug,
   'quiet|q'                      => \$Quiet,
   'noaction|n'                   => \$Noaction,
+  'auto-discover|a'              => \$AutoDiscover,
 
   'aws-access-key-id=s'          => \$aws_access_key_id,
   'aws-secret-access-key=s'      => \$aws_secret_access_key,
@@ -102,9 +105,13 @@ my $filesystem_frozen = 0;
 pod2usage(1) if $Help;
 
 my @volume_ids = @ARGV;
-pod2usage(2) unless scalar @volume_ids;
 
 $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
+
+# Autodetect mounted volume ids
+ebs_discover(\@volume_ids, $ec2_endpoint) if $AutoDiscover;
+
+pod2usage(2) unless scalar @volume_ids;
 
 my $freeze_cmd = "fsfreeze";
 $freeze_cmd    = "xfs_freeze"
@@ -276,6 +283,39 @@ sub ebs_snapshot {
       }
     }
   }
+}
+
+#
+# Auto discover instance mounted volumes
+#
+sub ebs_discover {
+  my ($volume_ids, $ec2_endpoint) = @_;
+  
+  $Debug and warn "$Prog: ", scalar localtime, ": auto discovering instance id\n";
+  
+  # Get current instance id using local endpoint http://169.254.169.254/latest/meta-data/instance-id
+  my $instance_id = get("http://169.254.169.254/latest/meta-data/instance-id");
+  
+  $Debug and warn "$Prog: ", scalar localtime, ": current instance id is: $instance_id\n";
+  
+  # EC2 API object
+  my $ec2 = Net::Amazon::EC2->new(
+    AWSAccessKeyId  => $aws_access_key_id,
+    SecretAccessKey => $aws_secret_access_key,
+    ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
+    # ($Debug ? (debug => 1) : ()),
+  );
+  
+  # Get mounted volumes
+  my $response = $ec2->describe_instance_attribute( InstanceId => $instance_id, Attribute => 'blockDeviceMapping');
+  
+  # Add discovered volume ids to given volume ids which should be an empty array
+  foreach my $device (@{$response->block_device_mapping}) {
+    $Debug and warn "$Prog: ", scalar localtime, ": found volume " . $device->ebs->volume_id . " mounted at " . $device->device_name . "\n";
+    push(@$volume_ids, $device->ebs->volume_id);
+  }
+  
+  return 1;
 }
 
 #
