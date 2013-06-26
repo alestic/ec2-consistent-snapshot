@@ -758,6 +758,9 @@ Don't do it. Just say what you would have done.
 
 Enable auto discovery of mounted volume-ids for current instance.
 
+=item -f --auto-freeze
+Enable auto freeze of mounted filesystem for discovered volumes.
+
 =item --aws-access-key-id KEY
 
 =item --aws-secret-access-key SECRET
