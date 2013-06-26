@@ -18,7 +18,7 @@ OPTIONS
     -n --noaction
         Don't do it. Just say what you would have done.
 
-    -a --auto-discovery
+    -a --auto-discover
         Enable auto discovery of mounted volume-ids for current instance.
 
     -f --auto-freeze
@@ -176,12 +176,12 @@ EXAMPLES
     Snapshot with auto discovery mode, i.e. all mounted volumes are snapshotted
     automatically using enviroment AWS settings
 
-     ec2-consistent-snapshot --auto-discovery
+     ec2-consistent-snapshot --auto-discover
 
     Snapshot with auto discovery and auto freeze, i.e. all mounted volumes 
     are frozen and then snapshotted automatically.
 
-     ec2-consistent-snapshot --auto-discovery --auto-freeze
+     ec2-consistent-snapshot --auto-discover --auto-freeze
 
     Snapshot four European volumes in a RAID configuration with MySQL,
     saving the snapshots with a description marking the current time:

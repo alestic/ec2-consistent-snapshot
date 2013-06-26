@@ -754,6 +754,10 @@ Quiet mode.
 
 Don't do it. Just say what you would have done.
 
+=item -a --auto-discover
+
+Enable auto discovery of mounted volume-ids for current instance.
+
 =item --aws-access-key-id KEY
 
 =item --aws-secret-access-key SECRET
