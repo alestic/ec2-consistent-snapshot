@@ -112,13 +112,6 @@ pod2usage(1) if $Help;
 
 my @volume_ids = @ARGV;
 
-$ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
-
-# Autodetect mounted volume ids and optionally mark them to be frozen
-ebs_discover(\@volume_ids, $ec2_endpoint, \@freeze_filesystem) if $AutoDiscover;
-
-pod2usage(2) unless scalar @volume_ids;
-
 my $freeze_cmd = "fsfreeze";
 $freeze_cmd    = "xfs_freeze"
     if $freeze_cmd and system("which $freeze_cmd >/dev/null") != 0;
@@ -151,6 +144,26 @@ if ( scalar (@descriptions) == 1 ) {
     $descriptions[$index] = $descriptions[0];
   }
 } 
+
+# Override ec2 endpoint if region given
+$ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
+
+# Some debug stuff
+$Debug and warn "$Prog: ", scalar localtime, ": create EC2 object\n";
+$Debug and warn "$Prog: Endpoint: $ec2_endpoint\n" if $ec2_endpoint;
+
+# Build an EC2 API object
+my $ec2 = Net::Amazon::EC2->new(
+  AWSAccessKeyId  => $aws_access_key_id,
+  SecretAccessKey => $aws_secret_access_key,
+  ($region ? (region => $region) : ()),
+  ($Debug ? (debug => 1) : ()),
+);
+
+# Autodetect mounted volume ids and optionally mark them to be frozen
+ebs_discover(\@volume_ids, $ec2, \@freeze_filesystem) if $AutoDiscover;
+
+pod2usage(2) unless scalar @volume_ids;
 
 #
 # Mongo
@@ -190,7 +203,7 @@ if ( scalar @freeze_filesystem > 0 ) {
   $filesystem_frozen = 1;
 }
 
-ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions);
+ebs_snapshot(\@volume_ids, $ec2, \@descriptions);
 
 exit 0;
 
@@ -231,18 +244,7 @@ END {
 #---- METHODS ----
 
 sub ebs_snapshot {
-  my ($volume_ids, $ec2_endpoint, $descriptions) = @_;
-
-  $Debug and warn "$Prog: ", scalar localtime, ": create EC2 object\n";
-  $Debug and warn "$Prog: Endpoint: $ec2_endpoint\n" if $ec2_endpoint;
-
-  # EC2 API object
-  my $ec2 = Net::Amazon::EC2->new(
-    AWSAccessKeyId  => $aws_access_key_id,
-    SecretAccessKey => $aws_secret_access_key,
-    ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
-    # ($Debug ? (debug => 1) : ()),
-  );
+  my ($volume_ids, $ec2, $descriptions) = @_;
 
  VOLUME:
   for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
@@ -295,7 +297,7 @@ sub ebs_snapshot {
 # Auto discover instance mounted volumes
 #
 sub ebs_discover {
-  my ($volume_ids, $ec2_endpoint, $freeze_filesystem) = @_;
+  my ($volume_ids, $ec2, $freeze_filesystem) = @_;
   
   $Debug and warn "$Prog: ", scalar localtime, ": auto discovering instance id\n";
   
@@ -303,15 +305,7 @@ sub ebs_discover {
   my $instance_id = get("http://169.254.169.254/latest/meta-data/instance-id");
   
   $Debug and warn "$Prog: ", scalar localtime, ": current instance id is: $instance_id\n";
-  
-  # EC2 API object
-  my $ec2 = Net::Amazon::EC2->new(
-    AWSAccessKeyId  => $aws_access_key_id,
-    SecretAccessKey => $aws_secret_access_key,
-    ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
-    # ($Debug ? (debug => 1) : ()),
-  );
-  
+    
   # Get mounted volumes
   $silenceWarnings = 1;
   my $response = $ec2->describe_instance_attribute( InstanceId => $instance_id, Attribute => 'blockDeviceMapping');
