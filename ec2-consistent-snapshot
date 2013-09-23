@@ -10,6 +10,8 @@ use Pod::Usage;
 use File::Slurp;
 use IO::Socket::SSL;
 eval 'use Mozilla::CA';
+use LWP::Simple;
+use JSON;
 use Time::HiRes qw(ualarm usleep);
 use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
@@ -30,6 +32,7 @@ my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_access_key_id_file     = $ENV{AWS_ACCESS_KEY_ID};
 my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
+my $aws_iam_role               = 0;
 my $region                     = undef;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
@@ -69,6 +72,7 @@ GetOptions(
   'aws-access-key-id-file=s'     => \$aws_access_key_id_file,
   'aws-secret-access-key-file=s' => \$aws_secret_access_key_file,
   'aws-credentials-file=s'       => \$aws_credentials_file,
+  'aws-iam-role'                 => \$aws_iam_role,
   'region=s'                     => \$region,
   'ec2-endpoint=s'               => \$ec2_endpoint,
   'description=s'                => \@descriptions,
@@ -112,10 +116,11 @@ $freeze_cmd    = "xfs_freeze"
 
 #---- MAIN ----
 
-($aws_access_key_id,      $aws_secret_access_key) = determine_access_keys(
+($aws_access_key_id,      $aws_secret_access_key, 
+                          $aws_iam_role)          = determine_access_keys(
  $aws_access_key_id,      $aws_secret_access_key,
  $aws_access_key_id_file, $aws_secret_access_key_file,
- $aws_credentials_file,
+ $aws_credentials_file,   $aws_iam_role,
 );
 die "$Prog: ERROR: Can't find AWS access key or secret access key"
   unless $aws_access_key_id and $aws_secret_access_key;
@@ -137,7 +142,7 @@ if ( scalar (@descriptions) == 1 ) {
   for ( my $index = 1; $index < scalar (@volume_ids); ++$index ) {
     $descriptions[$index] = $descriptions[0];
   }
-} 
+}
 
 #
 # Mongo
@@ -227,6 +232,7 @@ sub ebs_snapshot {
   my $ec2 = Net::Amazon::EC2->new(
     AWSAccessKeyId  => $aws_access_key_id,
     SecretAccessKey => $aws_secret_access_key,
+    ($aws_iam_role ? (SecurityToken => $aws_iam_role) : ()),
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
@@ -600,7 +606,7 @@ sub read_mycnf {
 sub determine_access_keys {
   my ($aws_access_key_id,      $aws_secret_access_key,
       $aws_access_key_id_file, $aws_secret_access_key_file,
-      $aws_credentials_file,
+      $aws_credentials_file,   $aws_iam_role,
      ) = @_;
 
   # 1. --aws-access-key-id and --aws-secret-access-key
@@ -618,7 +624,19 @@ sub determine_access_keys {
     return ($aws_access_key_id, $aws_secret_access_key);
   }
 
-  # 3. $AWS_CREDENTIALS or $HOME/.awssecret
+  #3 --aws-iam-role
+  if ($aws_iam_role) {
+    my $META_DATA_URL = "http://169.254.169.254";
+    my $RESOURCE = "latest/meta-data/iam/security-credentials";
+    my $role = get("$META_DATA_URL/$RESOURCE");
+    my $creds = decode_json(get("$META_DATA_URL/$RESOURCE/$role"));
+    $aws_access_key_id     = $creds->{'AccessKeyId'};
+    $aws_secret_access_key = $creds->{'SecretAccessKey'};
+    $aws_iam_role          = $creds->{'Token'};
+    return ($aws_access_key_id, $aws_secret_access_key, $aws_iam_role);
+  }
+
+  # 4. $AWS_CREDENTIALS or $HOME/.awssecret
   return read_awssecret($aws_credentials_file);
 }
 
@@ -712,6 +730,12 @@ File containing both the Amazon AWS access key and secret access
 key on seprate lines and in that order.  Defaults to contents of
 $AWS_CREDENTIALS environment variable or the value $HOME/.awssecret
 
+=item  --aws-iam-role
+
+This AWS instance has been setup to IAM roles with the correct
+permissions (ec2:CreateSnapshot). The script will get the Access
+Key and Secret Key from its metadata.
+
 =item --region REGION
 
 Specify a different EC2 region like "eu-west-1".  Defaults to
@@ -738,7 +762,7 @@ works on any filesystems that support freezing, provided the kernel
 you are using supports it. (Linux Ext3/4, ReiserFS, JFS, XFS.)
 fsfreeze comes with newer versions of util-linux.
 
-You may specify this option multiple times if you need to freeze multiple 
+You may specify this option multiple times if you need to freeze multiple
 filesystems on the the EBS volume(s).
 
 =item --mongo
@@ -770,8 +794,8 @@ database, which will be flushed and locked during the snapshot.
 
 =item --mysql-defaults-file FILE
 
-MySQL defaults file, containing host, username and password, this 
-option will ignore the --mysql-host, --mysql-username, 
+MySQL defaults file, containing host, username and password, this
+option will ignore the --mysql-host, --mysql-username,
 --mysql-password parameters
 
 =item --mysql-host HOST
@@ -834,7 +858,7 @@ start/unlock.
 =head1 ARGUMENTS
 
 =over
-    
+
 =item VOLUMEID
 
 EBS volume id(s) for which a snapshot is to be created.
