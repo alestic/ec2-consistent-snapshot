@@ -15,6 +15,7 @@ use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
+use Sys::Hostname;
 
 my $SIGALRM = 14;
 
@@ -432,22 +433,29 @@ sub mysql_lock {
   );
 
   my ($mysql_logfile, $mysql_position,
-      $mysql_binlog_do_db, $mysql_binlog_ignore_db);
+      $mysql_master, $mysql_binlog_do_db, $mysql_binlog_ignore_db);
+  my ($mysql_slave_logfile, $mysql_slave_position,
+      $mysql_slave_master, $mysql_slave_binlog_do_db, $mysql_slave_binlog_ignore_db);
   if ( not $Noaction ) {
     # This might be a slave database already
     my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
-    $mysql_logfile           = $slave_status->{Slave_IO_State}
+    $mysql_slave_logfile     = $slave_status->{Slave_IO_State}
                              ? $slave_status->{Master_Log_File}
                              : undef;
-    $mysql_position          = $slave_status->{Read_Master_Log_Pos};
-    $mysql_binlog_do_db      = $slave_status->{Replicate_Do_DB};
-    $mysql_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
+    $mysql_slave_position    = $slave_status->{Slave_IO_State}
+                             ? $slave_status->{Read_Master_Log_Pos}
+			     : undef;
+    $mysql_slave_master	     = $slave_status->{Slave_IO_State}
+                             ? $slave_status->{Master_Host}
+                             : undef;
+    $mysql_slave_binlog_do_db      = $slave_status->{Replicate_Do_DB};
+    $mysql_slave_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
 
     # or this might be the master
+    $mysql_master = hostname;
     ($mysql_logfile, $mysql_position,
      $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
-      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  })
-      unless $mysql_logfile;
+      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  });
   }
 
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
@@ -463,10 +471,16 @@ sub mysql_lock {
       open(MYSQLMASTERSTATUS,"> $mysql_master_status_file") or
         die "$Prog: Unable to open for write: $mysql_master_status_file: $!\n";
       print MYSQLMASTERSTATUS <<"EOM";
+master_host="$mysql_master"
 master_log_file="$mysql_logfile"
 master_log_pos="$mysql_position"
 master_binlog_do_db="$mysql_binlog_do_db"
 master_binlog_ignore_db="$mysql_binlog_ignore_db"
+slave_master_host="$mysql_slave_master"
+slave_log_file="$mysql_slave_logfile"
+slave_log_pos="$mysql_slave_position"
+slave_binlog_do_db="$mysql_slave_binlog_do_db"
+slave_binlog_ignore_db="$mysql_slave_binlog_ignore_db"
 EOM
       close(MYSQLMASTERSTATUS);
     }
