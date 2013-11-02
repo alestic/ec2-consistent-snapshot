@@ -200,6 +200,15 @@ END {
     }
   }
 
+  if ( defined($mysql_status_file) ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+      ": removing mysql status file: $mysql_status_file\n";
+    if ( not $Noaction ) {
+      unlink $mysql_status_file
+        or die "$Prog: Couldn't remove file: $mysql_status_file: $!\n";
+    }
+  }
+
   if ( $mongo_stopped ) {
     mongo_start();
   } elsif ( $mongo_dbh ) {

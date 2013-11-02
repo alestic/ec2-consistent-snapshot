@@ -93,9 +93,16 @@ OPTIONS
         $HOME/.my.cnf file contents.
 
     --mysql-master-status-file FILE
-        Store the MASTER STATUS output in a file on the snapshot. It will be
-        removed after the EBS snapshot is taken. This option will be ignored
-        with --mysql-stop
+        Store the MASTER STATUS (or slave status if this server is a slave) 
+        output in a file on the snapshot. It will be removed after the EBS 
+        snapshot is taken. This option will be ignored with --mysql-stop
+
+    --mysql-status-file FILE
+        Store the MASTER and SLAVE STATUS output in a file on the snapshot. It 
+	will be removed after the EBS snapshot is taken. This option will be 
+	ignored with --mysql-stop. This options is a more flexible alternative
+        to --mysql-master-status-file
+
 
     --mysql-stop
         Indicates that the volume contains data files for a running MySQL
