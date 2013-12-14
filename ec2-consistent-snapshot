@@ -227,8 +227,8 @@ sub ebs_snapshot {
 
   # EC2 API object
   my $ec2 = Net::Amazon::EC2->new(
-#    AWSAccessKeyId  => $aws_access_key_id,
-#    SecretAccessKey => $aws_secret_access_key,
+    ((! $use_iam_role) ? (AWSAccessKeyId  => $aws_access_key_id,) : () ),
+    ((! $use_iam_role) ? (SecretAccessKey => $aws_secret_access_key) : () ),
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
