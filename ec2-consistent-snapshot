@@ -30,6 +30,7 @@ my $aws_secret_access_key      = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_access_key_id_file     = $ENV{AWS_ACCESS_KEY_ID};
 my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
+my $use_iam_role               = 0;
 my $region                     = undef;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
@@ -69,6 +70,7 @@ GetOptions(
   'aws-access-key-id-file=s'     => \$aws_access_key_id_file,
   'aws-secret-access-key-file=s' => \$aws_secret_access_key_file,
   'aws-credentials-file=s'       => \$aws_credentials_file,
+  'use-iam-role'                 => \$use_iam_role,
   'region=s'                     => \$region,
   'ec2-endpoint=s'               => \$ec2_endpoint,
   'description=s'                => \@descriptions,
@@ -118,7 +120,7 @@ $freeze_cmd    = "xfs_freeze"
  $aws_credentials_file,
 );
 die "$Prog: ERROR: Can't find AWS access key or secret access key"
-  unless $aws_access_key_id and $aws_secret_access_key;
+  unless $use_iam_role or ($aws_access_key_id and $aws_secret_access_key);
 $Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
 
 die "$Prog: ERROR: Descriptions count (", scalar (@descriptions),
@@ -225,8 +227,8 @@ sub ebs_snapshot {
 
   # EC2 API object
   my $ec2 = Net::Amazon::EC2->new(
-    AWSAccessKeyId  => $aws_access_key_id,
-    SecretAccessKey => $aws_secret_access_key,
+    ((! $use_iam_role) ? (AWSAccessKeyId  => $aws_access_key_id,) : () ),
+    ((! $use_iam_role) ? (SecretAccessKey => $aws_secret_access_key) : () ),
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
@@ -711,6 +713,11 @@ described below.
 File containing both the Amazon AWS access key and secret access
 key on seprate lines and in that order.  Defaults to contents of
 $AWS_CREDENTIALS environment variable or the value $HOME/.awssecret
+
+=item  --use-iam-role
+
+The instance is part of an IAM role that that has permission to create
+snapshots so there is no need to specify access key or secret.
 
 =item --region REGION
 
