@@ -1,3 +1,12 @@
+ec2-consistent-snapshot (0.55) raring; urgency=low
+
+  * Add --use-iam-role flag to explicitly rely on using IAM roles as an
+    alternative to specifying access keys. Thanks to Seth de l'Isle
+    (fixes #22 on github)
+    (fixes #24 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Tue, 18 Feb 2014 18:46:05 -0800
+
 ec2-consistent-snapshot (0.55) quantal; urgency=low
 
   * Note MongoDB support in package description (debian/control)
