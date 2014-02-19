@@ -1,4 +1,4 @@
-ec2-consistent-snapshot (0.55) raring; urgency=low
+ec2-consistent-snapshot (0.56) raring; urgency=low
 
   * Add --use-iam-role flag to explicitly rely on using IAM roles as an
     alternative to specifying access keys. Thanks to Seth de l'Isle
