@@ -258,7 +258,7 @@ sub ebs_snapshot {
     my $volume_id = $$volume_ids[$index];
     my $description = $$descriptions[$index];
     my $name = $$names[$index];
-
+	
     $Debug and warn "$Prog: volume_id: $volume_id; description: $description name: $name\n";
 
     # Snapshot
@@ -292,13 +292,26 @@ sub ebs_snapshot {
       warn "$Prog: ERROR: create_snapshot returned '$snapshot'\n";
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
-	  my %taghash = (
-	      Name    => $name,
-	  );
-	  $ec2->create_tags(
-	  	ResourceId	=> $snapshot_id,
-		Tags => $taghash,
-	  );
+	  if ($snapshot->can('status')) {
+		#check if status is not pending
+	  	while ($snapshot->status eq "pending"){
+	  	  sleep(30);
+  	  	  $snapshot = $ec2->describe_snapshots(
+		  	SnapshotId => $snapshot->snapshot_id,
+		  );
+		}
+		#create tag if snapshot status is completed
+		if ($snapshot->can('status')) {
+			if($snapshot->status eq "completed"){
+				$ec2->create_tags(
+			  	  	ResourceId	=> $snapshot_id,
+			  		Tags => { 
+			       		Name => $name,
+			    	},
+			  	);
+			}
+		}
+	  }
       $Quiet or print "$snapshot_id\n";
     } else {
       for my $error ( @{$snapshot->errors} ) {
