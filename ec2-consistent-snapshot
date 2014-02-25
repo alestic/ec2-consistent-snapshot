@@ -34,7 +34,7 @@ my $use_iam_role               = 0;
 my $region                     = undef;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
-my @names               	   = ();
+my @names                      = ();
 my @freeze_filesystem          = ();
 my $mongo                      = 0;
 my $mongo_username             = undef;
@@ -75,7 +75,7 @@ GetOptions(
   'region=s'                     => \$region,
   'ec2-endpoint=s'               => \$ec2_endpoint,
   'description=s'                => \@descriptions,
-  'name=s'                		 => \@names,
+  'name=s'                       => \@names,
   'xfs-filesystem=s'             => \@freeze_filesystem,
   'freeze-filesystem=s'          => \@freeze_filesystem,
   'mongo'                        => \$mongo,
@@ -257,7 +257,7 @@ sub ebs_snapshot {
   for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
     my $volume_id = $$volume_ids[$index];
     my $description = $$descriptions[$index];
-    my $name = $$names[$index];
+	my $name = $$names[$index];
 	
     $Debug and warn "$Prog: volume_id: $volume_id; description: $description name: $name\n";
 
@@ -293,11 +293,11 @@ sub ebs_snapshot {
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
 	  $ec2->create_tags(
-  	  	ResourceId	=> $snapshot_id,
-  		Tags => { 
-       		Name => $name,
-    	},
-  	  );
+	    ResourceId	=> $snapshot_id,
+		Tags => {
+		  Name => $name,
+		},
+	  );
       $Quiet or print "$snapshot_id\n";
     } else {
       for my $error ( @{$snapshot->errors} ) {
