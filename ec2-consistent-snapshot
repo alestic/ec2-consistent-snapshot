@@ -257,7 +257,7 @@ sub ebs_snapshot {
   for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
     my $volume_id = $$volume_ids[$index];
     my $description = $$descriptions[$index];
-	my $name = $$names[$index];
+    my $name = $$names[$index];
 	
     $Debug and warn "$Prog: volume_id: $volume_id; description: $description name: $name\n";
 
