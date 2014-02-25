@@ -292,26 +292,12 @@ sub ebs_snapshot {
       warn "$Prog: ERROR: create_snapshot returned '$snapshot'\n";
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
-	  if ($snapshot->can('status')) {
-		#check if status is not pending
-	  	while ($snapshot->status eq "pending"){
-	  	  sleep(30);
-  	  	  $snapshot = $ec2->describe_snapshots(
-		  	SnapshotId => $snapshot->snapshot_id,
-		  );
-		}
-		#create tag if snapshot status is completed
-		if ($snapshot->can('status')) {
-			if($snapshot->status eq "completed"){
-				$ec2->create_tags(
-			  	  	ResourceId	=> $snapshot_id,
-			  		Tags => { 
-			       		Name => $name,
-			    	},
-			  	);
-			}
-		}
-	  }
+	  $ec2->create_tags(
+  	  	ResourceId	=> $snapshot_id,
+  		Tags => { 
+       		Name => $name,
+    	},
+  	  );
       $Quiet or print "$snapshot_id\n";
     } else {
       for my $error ( @{$snapshot->errors} ) {
