@@ -15,6 +15,7 @@ use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
+use Sys::Hostname;
 
 my $SIGALRM = 14;
 
@@ -45,6 +46,7 @@ my $mysql                      = 0;
 #my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
 my $mysql_defaults_file        = undef;
 my $mysql_socket               = undef;
+my $mysql_status_file          = undef;
 my $mysql_master_status_file   = undef;
 my $mysql_username             = undef;
 my $mysql_password             = undef;
@@ -86,6 +88,7 @@ GetOptions(
   'mysql-defaults-file=s'        => \$mysql_defaults_file,
   'mysql-socket=s'               => \$mysql_socket,
   'mysql-master-status-file=s'   => \$mysql_master_status_file,
+  'mysql-status-file=s'          => \$mysql_status_file,
   'mysql-username=s'             => \$mysql_username,
   'mysql-password=s'             => \$mysql_password,
   'mysql-host=s'                 => \$mysql_host,
@@ -196,6 +199,15 @@ END {
     if ( not $Noaction ) {
       unlink $mysql_master_status_file
         or die "$Prog: Couldn't remove file: $mysql_master_status_file: $!\n";
+    }
+  }
+
+  if ( defined($mysql_status_file) ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+      ": removing mysql status file: $mysql_status_file\n";
+    if ( not $Noaction ) {
+      unlink $mysql_status_file
+        or die "$Prog: Couldn't remove file: $mysql_status_file: $!\n";
     }
   }
 
@@ -434,29 +446,56 @@ sub mysql_lock {
   );
 
   my ($mysql_logfile, $mysql_position,
-      $mysql_binlog_do_db, $mysql_binlog_ignore_db);
+      $mysql_master, $mysql_binlog_do_db, $mysql_binlog_ignore_db);
+  my ($mysql_slave_logfile, $mysql_slave_position,
+      $mysql_slave_master, $mysql_slave_binlog_do_db, $mysql_slave_binlog_ignore_db);
   if ( not $Noaction ) {
-    # This might be a slave database already
+    # Get slave database info 
     my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
-    $mysql_logfile           = $slave_status->{Slave_IO_State}
-                             ? $slave_status->{Master_Log_File}
-                             : undef;
-    $mysql_position          = $slave_status->{Read_Master_Log_Pos};
-    $mysql_binlog_do_db      = $slave_status->{Replicate_Do_DB};
-    $mysql_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
+    if ($slave_status->{Slave_IO_State}){
+      $mysql_slave_logfile           = $slave_status->{Master_Log_File};
+      $mysql_slave_position          = $slave_status->{Read_Master_Log_Pos};
+      $mysql_slave_master            = $slave_status->{Master_Host};
+      $mysql_slave_binlog_do_db      = $slave_status->{Replicate_Do_DB};
+      $mysql_slave_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
+    }
 
-    # or this might be the master
+    # Get Master Position Info
+    $mysql_master = hostname;
     ($mysql_logfile, $mysql_position,
      $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
-      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  })
-      unless $mysql_logfile;
+      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  });
   }
 
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
 
-  print "$Prog: master_log_file=\"$mysql_logfile\",",
-              " master_log_pos=$mysql_position\n"
-    if $mysql_logfile and not $Quiet;
+  print "$Prog: master_log_file=\"",
+    ($mysql_slave_logfile?$mysql_slave_logfile:$mysql_logfile),
+    ",\", master_log_pos=",
+    ($mysql_slave_position?$mysql_slave_position:$mysql_position),
+    "\n" if $mysql_logfile and not $Quiet;
+
+  if ( defined($mysql_status_file) && $mysql_logfile ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+      ": writing MYSQL STATUS to $mysql_status_file\n";
+    if ( not $Noaction ) {
+      open(MYSQLSTATUS,"> $mysql_status_file") or
+        die "$Prog: Unable to open for write: $mysql_status_file: $!\n";
+      print MYSQLSTATUS <<"EOM";
+master_host="$mysql_master"
+master_log_file="$mysql_logfile"
+master_log_pos="$mysql_position"
+master_binlog_do_db="$mysql_binlog_do_db"
+master_binlog_ignore_db="$mysql_binlog_ignore_db"
+slave_master_host="$mysql_slave_master"
+slave_log_file="$mysql_slave_logfile"
+slave_log_pos="$mysql_slave_position"
+slave_binlog_do_db="$mysql_slave_binlog_do_db"
+slave_binlog_ignore_db="$mysql_slave_binlog_ignore_db"
+EOM
+      close(MYSQLSTATUS);
+    }
+  }
 
   if ( defined($mysql_master_status_file) && $mysql_logfile ) {
     $Debug and warn "$Prog: ", scalar localtime,
@@ -464,12 +503,21 @@ sub mysql_lock {
     if ( not $Noaction ) {
       open(MYSQLMASTERSTATUS,"> $mysql_master_status_file") or
         die "$Prog: Unable to open for write: $mysql_master_status_file: $!\n";
-      print MYSQLMASTERSTATUS <<"EOM";
+      if ( $mysql_slave_logfile) {
+        print MYSQLMASTERSTATUS <<"EOM";
+master_log_file="$mysql_slave_logfile"
+master_log_pos="$mysql_slave_position"
+master_binlog_do_db="$mysql_slave_binlog_do_db"
+master_binlog_ignore_db="$mysql_slave_binlog_ignore_db"
+EOM
+      }else{
+        print MYSQLMASTERSTATUS <<"EOM";
 master_log_file="$mysql_logfile"
 master_log_pos="$mysql_position"
 master_binlog_do_db="$mysql_binlog_do_db"
 master_binlog_ignore_db="$mysql_binlog_ignore_db"
 EOM
+      }
       close(MYSQLMASTERSTATUS);
     }
   }
