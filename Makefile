@@ -1,5 +1,5 @@
 
-all:: README.textile
+all:: README.md
 
-README.textile: ec2-consistent-snapshot
-	pod2wiki --style textile $< > $@
+README.md: ec2-consistent-snapshot
+	pod2markdown $< > $@

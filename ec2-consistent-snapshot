@@ -995,9 +995,9 @@ is necessary to select a CPAN mirror on Hardy.
 
 =item Amazon EC2
 
-=item  Amazon EC2 EBS (Elastic Block Store)
+=item Amazon EC2 EBS (Elastic Block Store)
 
-=item  ec2-create-snapshot
+=item ec2-create-snapshot
 
 =back
 
