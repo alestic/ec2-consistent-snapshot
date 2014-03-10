@@ -1003,6 +1003,16 @@ is necessary to select a CPAN mirror on Hardy.
 
 =head1 CAVEATS
 
+Freezing the root filesystem is not recommended. Be sure to test
+each filesystem you use it on before putting this into production, in
+exactly the way you would run it in production (i.e, inside cron if
+that's how you invoke it.)
+
+You should be aware that ec2-consistent-snapshot can hang if its output
+is directed at a filesystem which is being frozen, leading to a dead
+machine.
+
+
 This program currently supports the MySQL database.  Patches are
 welcomed for other databases.
 
