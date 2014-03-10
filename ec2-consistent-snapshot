@@ -1005,16 +1005,11 @@ is necessary to select a CPAN mirror on Hardy.
 
 Freezing the root filesystem is not recommended. Be sure to test
 each filesystem you use it on before putting this into production, in
-exactly the way you would run it in production (i.e, inside cron if
-that's how you invoke it.)
+exactly the way you would run it in production (e.g., inside cron if
+that's how you invoke it).
 
-You should be aware that ec2-consistent-snapshot can hang if its output
-is directed at a filesystem which is being frozen, leading to a dead
-machine.
-
-
-This program currently supports the MySQL database.  Patches are
-welcomed for other databases.
+ec2-consistent-snapshot can hang if its output is directed at a
+filesystem that is being frozen, leading to a dead machine.
 
 EBS snapshots are a critical part of protecting your valuable data.
 This program or the environment in which it is run may contain defects
