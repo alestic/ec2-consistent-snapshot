@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# Copyright (C) 2009-2012 Eric Hammond <ehammond@thinksome.com>
+# Copyright (C) 2009-2014 Eric Hammond <ehammond@thinksome.com>
 #
 use strict;
 use warnings;
@@ -1054,13 +1054,13 @@ providing feedback, bug reports, and patches:
   Seth de l'Isle
   Peter Waller
 
-=head1 AUTHOR
+=head1 AUTHOR/MAINTAINER
 
 Eric Hammond <ehammond@thinksome.com>
 
 =head1 LICENSE
 
-Copyright 2009-2013 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2014 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

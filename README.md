@@ -357,13 +357,13 @@ providing feedback, bug reports, and patches:
     Seth de l'Isle
     Peter Waller
 
-# AUTHOR
+# AUTHOR/MAINTAINER
 
 Eric Hammond <ehammond@thinksome.com>
 
 # LICENSE
 
-Copyright 2009-2013 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2014 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
