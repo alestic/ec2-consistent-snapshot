@@ -1,3 +1,11 @@
+ec2-consistent-snapshot (0.57) saucy; urgency=low
+
+  * Add warning to docs about freezing file system on root EBS volume
+    thanks to Peter Waller.
+    (fixes #29 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 10 Mar 2014 15:21:37 -0700
+
 ec2-consistent-snapshot (0.56) raring; urgency=low
 
   * Add --use-iam-role flag to explicitly rely on using IAM roles as an
