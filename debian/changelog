@@ -1,3 +1,9 @@
+ec2-consistent-snapshot (0.58) saucy; urgency=low
+
+  * Update docs
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 10 Mar 2014 15:57:51 -0700
+
 ec2-consistent-snapshot (0.57) saucy; urgency=low
 
   * Add warning to docs about freezing file system on root EBS volume
