@@ -42,6 +42,7 @@ my $mongo_host                 = undef;
 my $mongo_port                 = 27017;
 my $mongo_stop                 = 0;
 my $mysql                      = 0;
+my $mysql_stop_slave           = 0;
 #my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
 my $mysql_defaults_file        = undef;
 my $mysql_socket               = undef;
@@ -83,6 +84,7 @@ GetOptions(
   'mongo-port=s'                 => \$mongo_port,
   'mongo-stop'                   => \$mongo_stop,
   'mysql'                        => \$mysql,
+  'mysql-stop-slave'             => \$mysql_stop_slave,
   'mysql-defaults-file=s'        => \$mysql_defaults_file,
   'mysql-socket=s'               => \$mysql_socket,
   'mysql-master-status-file=s'   => \$mysql_master_status_file,
@@ -413,25 +415,37 @@ sub mysql_lock {
   # as this can interfere with long-running queries on the slaves.
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=0 }) unless $Noaction;
 
-  # Try a flush first without locking so the later flush with lock
-  # goes faster.  This may not be needed as it seems to interfere with
-  # some statements anyway.
-  sql_timeout_retry(
-    q{ FLUSH LOCAL TABLES },
-    "MySQL flush",
-    $lock_timeout,
-    $lock_tries,
-    $lock_sleep,
-  );
+  if ( $mysql_stop_slave ) {
+    # STOP SLAVE blocks until the current replication group is done processing
+    # so we only really need to run it once with a high timeout
+    sql_timeout_retry(
+      q{ STOP SLAVE},
+      "MySQL flush",
+      $lock_timeout * $lock_tries,
+      1,
+      0,
+    );
+  } else {
+    # Try a flush first without locking so the later flush with lock
+    # goes faster.  This may not be needed as it seems to interfere with
+    # some statements anyway.
+    sql_timeout_retry(
+      q{ FLUSH LOCAL TABLES },
+      "MySQL flush",
+      $lock_timeout,
+      $lock_tries,
+      $lock_sleep,
+    );
 
-  # Get a lock on the entire database
-  sql_timeout_retry(
-    q{ FLUSH LOCAL TABLES WITH READ LOCK },
-    "MySQL flush & lock",
-    $lock_timeout,
-    $lock_tries,
-    $lock_sleep,
-  );
+    # Get a lock on the entire database
+    sql_timeout_retry(
+      q{ FLUSH LOCAL TABLES WITH READ LOCK },
+      "MySQL flush & lock",
+      $lock_timeout,
+      $lock_tries,
+      $lock_sleep,
+    );
+  }
 
   my ($mysql_logfile, $mysql_position,
       $mysql_binlog_do_db, $mysql_binlog_ignore_db);
@@ -481,7 +495,11 @@ sub mysql_unlock {
   my ($mysql_dbh) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": MySQL unlock\n";
-  $mysql_dbh->do(q{ UNLOCK TABLES }) unless $Noaction;
+  if ( $mysql_stop_slave ) {
+     $mysql_dbh->do(q{ START SLAVE }) unless $Noaction;
+  } else {
+     $mysql_dbh->do(q{ UNLOCK TABLES }) unless $Noaction;
+  }
 
 }
 
@@ -774,6 +792,14 @@ and restarted afterwards. [EXPERIMENTAL]
 
 Indicates that the volume contains data files for a running MySQL
 database, which will be flushed and locked during the snapshot.
+
+=item --mysql-stop-slave
+
+Indicates that "STOP SLAVE" should be used instead of "FLUSH TABLES
+WITH READ LOCK" which can inadvertently lock up mysql, See :
+http://www.mysqlperformanceblog.com/2012/03/23/how-flush-tables-with-read-lock-works-with-innodb-tables/
+Note: This should only be used on mysql replication slaves as this
+doesn't prevent writes by other users during the backup.
 
 =item --mysql-defaults-file FILE
 
