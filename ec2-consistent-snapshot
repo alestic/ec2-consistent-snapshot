@@ -408,6 +408,12 @@ sub mysql_connect {
   return $mysql_dbh;
 }
 
+sub mysql_is_slave {
+  my ($mysql_dbh) = @_;
+  my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
+  return $slave_status->{Slave_SQL_Running} eq 'Yes';
+}
+
 sub mysql_lock {
   my ($mysql_dbh) = @_;
 
@@ -419,12 +425,12 @@ sub mysql_lock {
     # STOP SLAVE blocks until the current replication group is done processing
     # so we only really need to run it once with a high timeout
     sql_timeout_retry(
-      q{ STOP SLAVE},
-      "MySQL flush",
+      q{ STOP SLAVE },
+      "MySQL Stop Replication",
       $lock_timeout * $lock_tries,
       1,
       0,
-    );
+    ) unless $Noaction;
   } else {
     # Try a flush first without locking so the later flush with lock
     # goes faster.  This may not be needed as it seems to interfere with
@@ -452,9 +458,7 @@ sub mysql_lock {
   if ( not $Noaction ) {
     # This might be a slave database already
     my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
-    $mysql_logfile           = $slave_status->{Slave_IO_State}
-                             ? $slave_status->{Master_Log_File}
-                             : undef;
+    $mysql_logfile           = $slave_status->{Master_Log_File};
     $mysql_position          = $slave_status->{Read_Master_Log_Pos};
     $mysql_binlog_do_db      = $slave_status->{Replicate_Do_DB};
     $mysql_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
@@ -463,7 +467,7 @@ sub mysql_lock {
     ($mysql_logfile, $mysql_position,
      $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
       $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  })
-      unless $mysql_logfile;
+      unless mysql_is_slave($mysql_dbh);
   }
 
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
