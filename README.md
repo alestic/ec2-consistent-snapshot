@@ -22,7 +22,7 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 - \-n --noaction
 
-    Don't do it. Just say what you would have done.
+    Dry run. Just say what you would have done, don't do it. 
 
 - \--aws-access-key-id KEY
 - \--aws-secret-access-key SECRET
