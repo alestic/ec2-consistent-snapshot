@@ -485,20 +485,26 @@ sub mysql_lock {
   }
 
   my ($mysql_logfile, $mysql_position,
-      $mysql_binlog_do_db, $mysql_binlog_ignore_db);
+      $mysql_binlog_do_db, $mysql_binlog_ignore_db,
+      $mysql_master_hostname);
   if ( not $Noaction ) {
     # This might be a slave database already
     my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
+    $mysql_master_hostname   = $slave_status->{Master_Host};
     $mysql_logfile           = $slave_status->{Relay_Master_Log_File};
     $mysql_position          = $slave_status->{Exec_Master_Log_Pos};
     $mysql_binlog_do_db      = $slave_status->{Replicate_Do_DB};
     $mysql_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
 
     # or this might be the master
-    ($mysql_logfile, $mysql_position,
-     $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
-      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  })
-      unless mysql_is_slave($mysql_dbh);
+    if ( not mysql_is_slave($mysql_dbh) ) {
+      ($mysql_logfile, $mysql_position,
+       $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
+       $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  });
+      # Get the public hostname from an ec2 api endpoint.
+      # See: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AESDG-chapter-instancedata.html
+      $mysql_master_hostname = `curl http://169.254.169.254/latest/meta-data/public-hostname`;
+    }
   }
 
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
@@ -514,6 +520,7 @@ sub mysql_lock {
       open(MYSQLMASTERSTATUS,"> $mysql_master_status_file") or
         die "$Prog: Unable to open for write: $mysql_master_status_file: $!\n";
       print MYSQLMASTERSTATUS <<"EOM";
+master_hostname="$mysql_master_hostname"
 master_log_file="$mysql_logfile"
 master_log_pos="$mysql_position"
 master_binlog_do_db="$mysql_binlog_do_db"
