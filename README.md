@@ -73,7 +73,7 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     you are using supports it. (Linux Ext3/4, ReiserFS, JFS, XFS.)
     fsfreeze comes with newer versions of util-linux.
 
-    You may specify this option multiple times if you need to freeze multiple 
+    You may specify this option multiple times if you need to freeze multiple
     filesystems on the the EBS volume(s).
 
 - \--mongo
@@ -82,7 +82,6 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     database, which will be flushed and locked during the snapshot.
 
 - \--mongo-host HOST
- 
 - \--mongo-port PORT
 - \--mongo-username USER
 - \--mongo-password PASS
@@ -103,8 +102,8 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 - \--mysql-defaults-file FILE
 
-    MySQL defaults file, containing host, username and password, this 
-    option will ignore the --mysql-host, --mysql-username, 
+    MySQL defaults file, containing host, username and password, this
+    option will ignore the --mysql-host, --mysql-username,
     \--mysql-password parameters
 
 - \--mysql-host HOST
