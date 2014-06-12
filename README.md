@@ -337,7 +337,7 @@ Please report bugs at https://bugs.launchpad.net/ec2-consistent-snapshot
 # CREDITS
 
 Thanks to the following for performing tests on early versions,
-providing feedback, bug reports, and patches:
+providing feature development, feedback, bug reports, and patches:
 
     David Erickson
     Steve Caldwell
@@ -355,6 +355,7 @@ providing feedback, bug reports, and patches:
     Eric Lubow
     Seth de l'Isle
     Peter Waller
+    yalamber
 
 # AUTHOR/MAINTAINER
 
