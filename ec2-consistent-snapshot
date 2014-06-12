@@ -34,6 +34,8 @@ my $use_iam_role               = 0;
 my $region                     = undef;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
+my @tags                       = ();
+my $tag_separator              = ";";
 my @freeze_filesystem          = ();
 my $mongo                      = 0;
 my $mongo_username             = undef;
@@ -74,6 +76,7 @@ GetOptions(
   'region=s'                     => \$region,
   'ec2-endpoint=s'               => \$ec2_endpoint,
   'description=s'                => \@descriptions,
+  'tag=s'                        => \@tags,
   'xfs-filesystem=s'             => \@freeze_filesystem,
   'freeze-filesystem=s'          => \@freeze_filesystem,
   'mongo'                        => \$mongo,
@@ -139,7 +142,20 @@ if ( scalar (@descriptions) == 1 ) {
   for ( my $index = 1; $index < scalar (@volume_ids); ++$index ) {
     $descriptions[$index] = $descriptions[0];
   }
-} 
+}
+
+die "$Prog: ERROR: Tags count (", scalar (@tags),
+    ") does not match volumes count (", scalar (@volume_ids), ")"
+  if (scalar (@tags) > 1 &&
+      scalar (@tags) != scalar (@volume_ids) );
+
+if ( scalar (@tags) == 1 ) {
+  $Debug and warn "$Prog: Using tag '$tags[0]'"
+                . " for all snapshot tags\n";
+  for ( my $index = 1; $index < scalar (@volume_ids); ++$index ) {
+    $tags[$index] = $tags[0];
+  }
+}
 
 #
 # Mongo
@@ -179,7 +195,7 @@ if ( scalar @freeze_filesystem > 0 ) {
   $filesystem_frozen = 1;
 }
 
-ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions);
+ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions, \@tags);
 
 exit 0;
 
@@ -220,7 +236,7 @@ END {
 #---- METHODS ----
 
 sub ebs_snapshot {
-  my ($volume_ids, $ec2_endpoint, $descriptions) = @_;
+  my ($volume_ids, $ec2_endpoint, $descriptions, $tags) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": create EC2 object\n";
   $Debug and warn "$Prog: Endpoint: $ec2_endpoint\n" if $ec2_endpoint;
@@ -271,6 +287,21 @@ sub ebs_snapshot {
       warn "$Prog: ERROR: create_snapshot returned '$snapshot'\n";
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
+      if (scalar (@tags) > 0){
+        my $tag = $$tags[$index];
+        my @sep_tags = split($tag_separator, $tag);
+        if(scalar (@sep_tags) > 0){
+          my %snapshot_tag;
+          for ( my $tag_index = 0; $tag_index < scalar (@sep_tags); ++$tag_index ) {
+            my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
+            $snapshot_tag{$tag_key} = $tag_value;
+          }
+          $ec2->create_tags(
+            ResourceId    => $snapshot_id,
+            Tags          => \%snapshot_tag,
+          );
+        }
+      }
       $Quiet or print "$snapshot_id\n";
     } else {
       for my $error ( @{$snapshot->errors} ) {
@@ -745,7 +776,7 @@ works on any filesystems that support freezing, provided the kernel
 you are using supports it. (Linux Ext3/4, ReiserFS, JFS, XFS.)
 fsfreeze comes with newer versions of util-linux.
 
-You may specify this option multiple times if you need to freeze multiple 
+You may specify this option multiple times if you need to freeze multiple
 filesystems on the the EBS volume(s).
 
 =item --mongo
@@ -754,7 +785,7 @@ Indicates that the volume contains data files for a running Mongo
 database, which will be flushed and locked during the snapshot.
 
 =item --mongo-host HOST
- 
+
 =item --mongo-port PORT
 
 =item --mongo-username USER
@@ -777,8 +808,8 @@ database, which will be flushed and locked during the snapshot.
 
 =item --mysql-defaults-file FILE
 
-MySQL defaults file, containing host, username and password, this 
-option will ignore the --mysql-host, --mysql-username, 
+MySQL defaults file, containing host, username and password, this
+option will ignore the --mysql-host, --mysql-username,
 --mysql-password parameters
 
 =item --mysql-host HOST
@@ -841,7 +872,7 @@ start/unlock.
 =head1 ARGUMENTS
 
 =over
-    
+
 =item VOLUMEID
 
 EBS volume id(s) for which a snapshot is to be created.
@@ -1075,4 +1106,3 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 =cut
-
