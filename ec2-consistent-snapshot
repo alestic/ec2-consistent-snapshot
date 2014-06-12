@@ -142,7 +142,7 @@ if ( scalar (@descriptions) == 1 ) {
   for ( my $index = 1; $index < scalar (@volume_ids); ++$index ) {
     $descriptions[$index] = $descriptions[0];
   }
-} 
+}
 
 die "$Prog: ERROR: Tags count (", scalar (@tags),
     ") does not match volumes count (", scalar (@volume_ids), ")"
@@ -155,7 +155,7 @@ if ( scalar (@tags) == 1 ) {
   for ( my $index = 1; $index < scalar (@volume_ids); ++$index ) {
     $tags[$index] = $tags[0];
   }
-} 
+}
 
 #
 # Mongo
@@ -248,12 +248,12 @@ sub ebs_snapshot {
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
-  
+
  VOLUME:
   for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
     my $volume_id = $$volume_ids[$index];
     my $description = $$descriptions[$index];
-    
+
     $Debug and warn "$Prog: volume_id: $volume_id; description: $description\n";
 
     # Snapshot
@@ -776,7 +776,7 @@ works on any filesystems that support freezing, provided the kernel
 you are using supports it. (Linux Ext3/4, ReiserFS, JFS, XFS.)
 fsfreeze comes with newer versions of util-linux.
 
-You may specify this option multiple times if you need to freeze multiple 
+You may specify this option multiple times if you need to freeze multiple
 filesystems on the the EBS volume(s).
 
 =item --mongo
@@ -785,7 +785,7 @@ Indicates that the volume contains data files for a running Mongo
 database, which will be flushed and locked during the snapshot.
 
 =item --mongo-host HOST
- 
+
 =item --mongo-port PORT
 
 =item --mongo-username USER
@@ -808,8 +808,8 @@ database, which will be flushed and locked during the snapshot.
 
 =item --mysql-defaults-file FILE
 
-MySQL defaults file, containing host, username and password, this 
-option will ignore the --mysql-host, --mysql-username, 
+MySQL defaults file, containing host, username and password, this
+option will ignore the --mysql-host, --mysql-username,
 --mysql-password parameters
 
 =item --mysql-host HOST
@@ -872,7 +872,7 @@ start/unlock.
 =head1 ARGUMENTS
 
 =over
-    
+
 =item VOLUMEID
 
 EBS volume id(s) for which a snapshot is to be created.
