@@ -691,7 +691,7 @@ Quiet mode.
 
 =item -n --noaction
 
-Don't do it. Just say what you would have done.
+Dry run. Just say what you would have done, don't do it.
 
 =item --aws-access-key-id KEY
 

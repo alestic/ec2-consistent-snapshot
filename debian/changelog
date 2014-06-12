@@ -1,3 +1,9 @@
+ec2-consistent-snapshot (0.59) saucy; urgency=low
+
+  * Tweak to --noaction documentation from phalgun
+
+ -- Eric Hammond <ehammond@thinksome.com>  Thu, 12 Jun 2014 12:12:02 -0700
+
 ec2-consistent-snapshot (0.58) saucy; urgency=low
 
   * Update docs
