@@ -48,6 +48,7 @@ my $mysql                      = 0;
 my $mysql_defaults_file        = undef;
 my $mysql_socket               = undef;
 my $mysql_master_status_file   = undef;
+my $mysql_tag_master_status    = 0;
 my $mysql_username             = undef;
 my $mysql_password             = undef;
 my $mysql_host                 = undef;
@@ -89,6 +90,7 @@ GetOptions(
   'mysql-defaults-file=s'        => \$mysql_defaults_file,
   'mysql-socket=s'               => \$mysql_socket,
   'mysql-master-status-file=s'   => \$mysql_master_status_file,
+  'mysql-tag-master-status'      => \$mysql_tag_master_status,
   'mysql-username=s'             => \$mysql_username,
   'mysql-password=s'             => \$mysql_password,
   'mysql-host=s'                 => \$mysql_host,
@@ -174,11 +176,13 @@ if ( $mongo_stop ) {
 #
 my $mysql_stopped = undef;
 my $mysql_dbh = undef;
+
 if ( $mysql_stop ) {
   $mysql_stopped = mysql_stop();
 } elsif ( $mysql ) {
   $mysql_dbh = mysql_connect($mysql_host, $mysql_socket, $mysql_username, $mysql_password);
-  mysql_lock($mysql_dbh);
+
+   mysql_lock($mysql_dbh,\@tags,\@volume_ids);
 }
 
 if ( $pre_freeze_command ) {
@@ -296,6 +300,7 @@ sub ebs_snapshot {
             my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
             $snapshot_tag{$tag_key} = $tag_value;
           }
+
           $ec2->create_tags(
             ResourceId    => $snapshot_id,
             Tags          => \%snapshot_tag,
@@ -438,7 +443,7 @@ sub mysql_connect {
 }
 
 sub mysql_lock {
-  my ($mysql_dbh) = @_;
+  my ($mysql_dbh,$tags,$volume_ids) = @_;
 
   # Don't pass FLUSH TABLES statements on to replication slaves
   # as this can interfere with long-running queries on the slaves.
@@ -502,6 +507,24 @@ master_binlog_do_db="$mysql_binlog_do_db"
 master_binlog_ignore_db="$mysql_binlog_ignore_db"
 EOM
       close(MYSQLMASTERSTATUS);
+    }
+  }
+
+  if ( $mysql_tag_master_status && $mysql_logfile ) {
+    my @binlog_tags;
+    push(@binlog_tags, "master_log_file=$mysql_logfile")                  if ( $mysql_logfile );
+    push(@binlog_tags, "master_log_pos=$mysql_position")                  if ( $mysql_position );
+    push(@binlog_tags, "master_binlog_do_db=$mysql_binlog_do_db")         if ( $mysql_binlog_do_db );
+    push(@binlog_tags, "master_binlog_ignore_db=$mysql_binlog_ignore_db") if ( $mysql_binlog_ignore_db );
+    my $tag_string = join($tag_separator,@binlog_tags);
+
+    for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
+      if ( $tags->[$index] ) {
+        $tags->[$index] .= ";$tag_string";
+      }
+      else {
+        $tags->[$index] = $tag_string;
+      }
     }
   }
 
