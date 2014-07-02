@@ -853,6 +853,11 @@ Store the MASTER STATUS output in a file on the snapshot. It will be
 removed after the EBS snapshot is taken.  This option will be ignored
 with --mysql-stop
 
+=item --mysql-tag-master-status
+
+Store the MASTER STATUS output in tags on the snapshots that are
+created.  This option will be ignored with --mysql-stop
+
 =item --mysql-stop
 
 Indicates that the volume contains data files for a running MySQL
