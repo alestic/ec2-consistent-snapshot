@@ -201,6 +201,8 @@ my $success =
 exit ($success ? 0 : -1);
 
 END {
+  my $exit_status = $?;
+
   fs_thaw(\@freeze_filesystem) if $filesystem_frozen;
 
   if ( $post_thaw_command ) {
@@ -232,6 +234,8 @@ END {
   }
 
   $Debug and warn "$Prog: ", scalar localtime, ": done\n";
+
+  exit ($exit_status || $?);
 }
 
 #---- METHODS ----
