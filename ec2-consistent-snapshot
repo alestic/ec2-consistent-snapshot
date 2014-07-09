@@ -513,7 +513,10 @@ sub sql_timeout_retry {
   my ($sql, $description, $lock_timeout, $lock_tries, $lock_sleep) = @_;
 
   my $action = POSIX::SigAction->new(
-    sub { die "timeout" },
+    sub {
+      $mysql_dbh->clone()->do("KILL QUERY ".$mysql_dbh->{"mysql_thread_id"});
+      die "timeout";
+    },
     POSIX::SigSet->new( SIGALRM ),
   );
   my $oldaction = POSIX::SigAction->new();
