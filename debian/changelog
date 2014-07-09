@@ -1,3 +1,10 @@
+ec2-consistent-snapshot (0.61) saucy; urgency=low
+
+  * Add more error checking and exit code.
+    (fixes #37 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Wed, 09 Jul 2014 11:57:41 -0700
+
 ec2-consistent-snapshot (0.60) saucy; urgency=low
 
   * Add --tags option thanks to yalamber

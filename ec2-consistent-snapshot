@@ -195,9 +195,10 @@ if ( scalar @freeze_filesystem > 0 ) {
   $filesystem_frozen = 1;
 }
 
-ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions, \@tags);
+my $success = 
+  ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions, \@tags);
 
-exit 0;
+exit ($success ? 0 : -1);
 
 END {
   fs_thaw(\@freeze_filesystem) if $filesystem_frozen;
@@ -249,6 +250,11 @@ sub ebs_snapshot {
     # ($Debug ? (debug => 1) : ()),
   );
 
+  if ( not $ec2 ) {
+    warn "$Prog: ERROR: Unable to create EC2 connection";
+    return undef;
+  }
+
  VOLUME:
   for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
     my $volume_id = $$volume_ids[$index];
@@ -283,8 +289,10 @@ sub ebs_snapshot {
     my $snapshot_id;
     if ( not defined $snapshot ) {
       warn "$Prog: ERROR: create_snapshot returned undef\n";
+      return undef;
     } elsif ( not ref $snapshot ) {
       warn "$Prog: ERROR: create_snapshot returned '$snapshot'\n";
+      return undef;
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
       if (scalar (@tags) > 0){
@@ -307,8 +315,10 @@ sub ebs_snapshot {
       for my $error ( @{$snapshot->errors} ) {
         warn "$Prog: ERROR: ".$error->message."\n";
       }
+      return undef;
     }
   }
+  return 1;
 }
 
 #
