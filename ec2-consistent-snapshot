@@ -16,8 +16,6 @@ use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
 
-my $SIGALRM = 14;
-
 #---- OPTIONS ----
 
 my $Help                       = 0;
@@ -162,6 +160,10 @@ if ( $mysql_stop ) {
   $mysql_stopped = mysql_stop();
 } elsif ( $mysql ) {
   $mysql_dbh = mysql_connect($mysql_host, $mysql_socket, $mysql_username, $mysql_password);
+  sub interrupt { sql_kill_current_query("interrupted"); };
+  $SIG{INT}    = \&interrupt;
+  $SIG{TERM}   = \&interrupt;
+  $SIG{HUP}    = \&interrupt;
   mysql_lock($mysql_dbh);
 }
 
@@ -513,14 +515,11 @@ sub sql_timeout_retry {
   my ($sql, $description, $lock_timeout, $lock_tries, $lock_sleep) = @_;
 
   my $action = POSIX::SigAction->new(
-    sub {
-      $mysql_dbh->clone()->do("KILL QUERY ".$mysql_dbh->{"mysql_thread_id"});
-      die "timeout";
-    },
+    sub { sql_kill_current_query("timeout"); },
     POSIX::SigSet->new( SIGALRM ),
   );
   my $oldaction = POSIX::SigAction->new();
-  sigaction($SIGALRM, $action, $oldaction);
+  sigaction(SIGALRM, $action, $oldaction);
  LOCK:
   while ( $lock_tries -- ) {
     $Debug and warn "$Prog: ", scalar localtime, ": $description\n";
@@ -533,13 +532,24 @@ sub sql_timeout_retry {
     last LOCK unless $@ =~ /timeout/;
 
   } continue {
+    die if $@ =~ /interrupted/;
+
     $Quiet or  warn "$Prog: MySQL timeout at $lock_timeout sec\n";
     $Debug and warn "$Prog: Trying again in $lock_sleep seconds\n";
     usleep($lock_sleep * 1_000_000);
     #TBD: May need to reopen $mysql_dbh here as the handle may not be clean.
   }
-  sigaction($SIGALRM, $oldaction);
+  sigaction(SIGALRM, $oldaction);
   die "$Prog: ERROR: MySQL failure: $@" if $@;
+}
+
+# Kill current query after timeout or interrupt signal (see issue #23)
+sub sql_kill_current_query {
+   my ($reason) = @_;
+   if ( $mysql_dbh ) {
+      $mysql_dbh->clone()->do("KILL QUERY ".$mysql_dbh->{"mysql_thread_id"});
+   }
+   die $reason;
 }
 
 sub fs_freeze {
