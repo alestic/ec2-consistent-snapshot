@@ -356,6 +356,7 @@ providing feature development, feedback, bug reports, and patches:
     Seth de l'Isle
     Peter Waller
     yalamber
+    Daniel Beardsley
 
 # AUTHOR/MAINTAINER
 

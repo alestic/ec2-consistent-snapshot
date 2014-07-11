@@ -50,7 +50,6 @@ my $mysql_username             = undef;
 my $mysql_password             = undef;
 my $mysql_host                 = undef;
 my $mysql_stop                 = 0;
-my $mysql_kill_query           = 0;
 my $snapshot_timeout           = 10.0; # seconds
 my $lock_timeout               =  0.5; # seconds
 my $lock_tries                 = 60;
@@ -173,6 +172,7 @@ if ( $mongo_stop ) {
 #
 my $mysql_stopped = undef;
 my $mysql_dbh = undef;
+my $mysql_kill_query = 0;
 if ( $mysql_stop ) {
   $mysql_stopped = mysql_stop();
 } elsif ( $mysql ) {
@@ -1119,6 +1119,7 @@ providing feature development, feedback, bug reports, and patches:
   Seth de l'Isle
   Peter Waller
   yalamber
+  Daniel Beardsley
 
 =head1 AUTHOR/MAINTAINER
 
