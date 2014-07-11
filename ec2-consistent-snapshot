@@ -16,8 +16,6 @@ use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
 
-my $SIGALRM = 14;
-
 #---- OPTIONS ----
 
 my $Help                       = 0;
@@ -53,6 +51,7 @@ my $mysql_username             = undef;
 my $mysql_password             = undef;
 my $mysql_host                 = undef;
 my $mysql_stop                 = 0;
+my $mysql_kill_query           = 0;
 my $snapshot_timeout           = 10.0; # seconds
 my $lock_timeout               =  0.5; # seconds
 my $lock_tries                 = 60;
@@ -180,6 +179,10 @@ if ( $mysql_stop ) {
   $mysql_stopped = mysql_stop();
 } elsif ( $mysql ) {
   $mysql_dbh = mysql_connect($mysql_host, $mysql_socket, $mysql_username, $mysql_password);
+  sub interrupt { $mysql_kill_query = 1; die("interrupted") };
+  $SIG{INT}    = \&interrupt;
+  $SIG{TERM}   = \&interrupt;
+  $SIG{HUP}    = \&interrupt;
   mysql_lock($mysql_dbh);
 }
 
@@ -227,6 +230,9 @@ END {
   if ( $mysql_stopped ) {
     mysql_start();
   } elsif ( $mysql_dbh ) {
+    if ( $mysql_kill_query ) {
+       sql_kill_current_query();
+    }
     mysql_unlock($mysql_dbh);
     $Debug and warn "$Prog: ", scalar localtime, ": MySQL disconnect\n";
     $mysql_dbh->disconnect;
@@ -268,13 +274,16 @@ sub ebs_snapshot {
 
     my $snapshot;
     eval {
-      local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
-      ualarm($snapshot_timeout * 1_000_000);
-      $snapshot = $ec2->create_snapshot(
-        VolumeId    => $volume_id,
-        Description => $description,
-      );
+       eval {
+         local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+         ualarm($snapshot_timeout * 1_000_000);
+         $snapshot = $ec2->create_snapshot(
+           VolumeId    => $volume_id,
+           Description => $description,
+         );
+      };
       ualarm(0);
+      die $@ if $@;
     };
     ualarm(0);
     if ( $@  ){
@@ -573,30 +582,46 @@ sub sql_timeout_retry {
   my ($sql, $description, $lock_timeout, $lock_tries, $lock_sleep) = @_;
 
   my $action = POSIX::SigAction->new(
-    sub { die "timeout" },
+    sub { $mysql_kill_query = 1; die "timeout"; },
     POSIX::SigSet->new( SIGALRM ),
   );
   my $oldaction = POSIX::SigAction->new();
-  sigaction($SIGALRM, $action, $oldaction);
+  sigaction(SIGALRM, $action, $oldaction);
  LOCK:
   while ( $lock_tries -- ) {
     $Debug and warn "$Prog: ", scalar localtime, ": $description\n";
     eval {
-      ualarm($lock_timeout * 1_000_000);
-      $mysql_dbh->do($sql) unless $Noaction;
-      ualarm(0);
+       eval {
+         ualarm($lock_timeout * 1_000_000);
+         $mysql_dbh->do($sql) unless $Noaction;
+       };
+       ualarm(0);
+       die $@ if $@; 
     };
-    ualarm(0);
     last LOCK unless $@ =~ /timeout/;
 
+    if ( $mysql_kill_query ) {
+       sql_kill_current_query();
+    }
+
   } continue {
+    die if $@ =~ /interrupted/;
+
     $Quiet or  warn "$Prog: MySQL timeout at $lock_timeout sec\n";
     $Debug and warn "$Prog: Trying again in $lock_sleep seconds\n";
     usleep($lock_sleep * 1_000_000);
     #TBD: May need to reopen $mysql_dbh here as the handle may not be clean.
   }
-  sigaction($SIGALRM, $oldaction);
+  sigaction(SIGALRM, $oldaction);
   die "$Prog: ERROR: MySQL failure: $@" if $@;
+}
+
+# Kill current query after timeout or interrupt signal (see issue #23)
+sub sql_kill_current_query {
+   if ( $mysql_dbh ) {
+      $mysql_dbh->clone()->do("KILL QUERY ".$mysql_dbh->{"mysql_thread_id"});
+   }
+   $mysql_kill_query = 0;
 }
 
 sub fs_freeze {
