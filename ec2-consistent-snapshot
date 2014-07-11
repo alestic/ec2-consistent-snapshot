@@ -48,6 +48,7 @@ my $mysql_username             = undef;
 my $mysql_password             = undef;
 my $mysql_host                 = undef;
 my $mysql_stop                 = 0;
+my $mysql_kill_query           = 0;
 my $snapshot_timeout           = 10.0; # seconds
 my $lock_timeout               =  0.5; # seconds
 my $lock_tries                 = 60;
@@ -160,7 +161,7 @@ if ( $mysql_stop ) {
   $mysql_stopped = mysql_stop();
 } elsif ( $mysql ) {
   $mysql_dbh = mysql_connect($mysql_host, $mysql_socket, $mysql_username, $mysql_password);
-  sub interrupt { sql_kill_current_query("interrupted"); };
+  sub interrupt { $mysql_kill_query = 1; die("interrupted") };
   $SIG{INT}    = \&interrupt;
   $SIG{TERM}   = \&interrupt;
   $SIG{HUP}    = \&interrupt;
@@ -211,6 +212,9 @@ END {
   if ( $mysql_stopped ) {
     mysql_start();
   } elsif ( $mysql_dbh ) {
+    if ( $mysql_kill_query ) {
+       sql_kill_current_query();
+    }
     mysql_unlock($mysql_dbh);
     $Debug and warn "$Prog: ", scalar localtime, ": MySQL disconnect\n";
     $mysql_dbh->disconnect;
@@ -515,7 +519,7 @@ sub sql_timeout_retry {
   my ($sql, $description, $lock_timeout, $lock_tries, $lock_sleep) = @_;
 
   my $action = POSIX::SigAction->new(
-    sub { sql_kill_current_query("timeout"); },
+    sub { $mysql_kill_query = 1; die "timeout"; },
     POSIX::SigSet->new( SIGALRM ),
   );
   my $oldaction = POSIX::SigAction->new();
@@ -531,6 +535,10 @@ sub sql_timeout_retry {
     ualarm(0);
     last LOCK unless $@ =~ /timeout/;
 
+    if ( $mysql_kill_query ) {
+       sql_kill_current_query();
+    }
+
   } continue {
     die if $@ =~ /interrupted/;
 
@@ -545,11 +553,10 @@ sub sql_timeout_retry {
 
 # Kill current query after timeout or interrupt signal (see issue #23)
 sub sql_kill_current_query {
-   my ($reason) = @_;
    if ( $mysql_dbh ) {
       $mysql_dbh->clone()->do("KILL QUERY ".$mysql_dbh->{"mysql_thread_id"});
    }
-   die $reason;
+   $mysql_kill_query = 0;
 }
 
 sub fs_freeze {
