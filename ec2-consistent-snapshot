@@ -256,13 +256,16 @@ sub ebs_snapshot {
 
     my $snapshot;
     eval {
-      local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
-      ualarm($snapshot_timeout * 1_000_000);
-      $snapshot = $ec2->create_snapshot(
-        VolumeId    => $volume_id,
-        Description => $description,
-      );
+       eval {
+         local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+         ualarm($snapshot_timeout * 1_000_000);
+         $snapshot = $ec2->create_snapshot(
+           VolumeId    => $volume_id,
+           Description => $description,
+         );
+      };
       ualarm(0);
+      die $@ if $@;
     };
     ualarm(0);
     if ( $@  ){
@@ -528,11 +531,13 @@ sub sql_timeout_retry {
   while ( $lock_tries -- ) {
     $Debug and warn "$Prog: ", scalar localtime, ": $description\n";
     eval {
-      ualarm($lock_timeout * 1_000_000);
-      $mysql_dbh->do($sql) unless $Noaction;
-      ualarm(0);
+       eval {
+         ualarm($lock_timeout * 1_000_000);
+         $mysql_dbh->do($sql) unless $Noaction;
+       };
+       ualarm(0);
+       die $@ if $@; 
     };
-    ualarm(0);
     last LOCK unless $@ =~ /timeout/;
 
     if ( $mysql_kill_query ) {
