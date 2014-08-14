@@ -7,7 +7,9 @@ use warnings;
 (our $Prog) = ($0 =~ m%([^/]+)$%);
 use Getopt::Long;
 use Pod::Usage;
+use File::Basename;
 use File::Slurp;
+use File::Spec;
 use IO::Socket::SSL;
 eval 'use Mozilla::CA';
 use Time::HiRes qw(ualarm usleep);
@@ -15,6 +17,8 @@ use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
+use LWP;
+use LWP::UserAgent;
 
 #---- OPTIONS ----
 
@@ -35,6 +39,7 @@ my @descriptions               = ();
 my @tags                       = ();
 my $tag_separator              = ";";
 my @freeze_filesystem          = ();
+my $keep_quota;
 my $mongo                      = 0;
 my $mongo_username             = undef;
 my $mongo_password             = undef;
@@ -56,7 +61,8 @@ my $lock_tries                 = 60;
 my $lock_sleep                 =  5.0; # seconds
 my $pre_freeze_command         = undef;
 my $post_thaw_command          = undef;
-my $mongo_init_script                = '/etc/init.d/mongod';
+my $mongo_init_script          = '/etc/init.d/mongod';
+my $derive_volumes             = 0;
 
 Getopt::Long::config('no_ignore_case');
 GetOptions(
@@ -73,10 +79,12 @@ GetOptions(
   'use-iam-role'                 => \$use_iam_role,
   'region=s'                     => \$region,
   'ec2-endpoint=s'               => \$ec2_endpoint,
+  'derive-volumes'               => \$derive_volumes,
   'description=s'                => \@descriptions,
   'tag=s'                        => \@tags,
   'xfs-filesystem=s'             => \@freeze_filesystem,
   'freeze-filesystem=s'          => \@freeze_filesystem,
+  'keep=s'                       => \$keep_quota,
   'mongo'                        => \$mongo,
   'mongo-username=s'             => \$mongo_username,
   'mongo-password=s'             => \$mongo_password,
@@ -97,21 +105,31 @@ GetOptions(
   'lock-sleep=s'                 => \$lock_sleep,
   'pre-freeze-command=s'         => \$pre_freeze_command,
   'post-thaw-command=s'          => \$post_thaw_command,
-  'mongo-init=s'                       => \$mongo_init_script,
+  'mongo-init=s'                 => \$mongo_init_script,
 ) or pod2usage(2);
 
 my $filesystem_frozen = 0;
 
 pod2usage(1) if $Help;
 
+# --derive-volumes only valid if --freeze-filesystem used
+pod2usage(2) if ($derive_volumes && scalar(@freeze_filesystem) < 1);
+
 my @volume_ids = @ARGV;
-pod2usage(2) unless scalar @volume_ids;
+pod2usage(2) unless (scalar @volume_ids || $derive_volumes);
+
+# --derive-volumes not valid if volume id(s) specified
+pod2usage(2) if ($derive_volumes && scalar(@volume_ids) > 0);
 
 $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 
 my $freeze_cmd = "fsfreeze";
 $freeze_cmd    = "xfs_freeze"
     if $freeze_cmd and system("which $freeze_cmd >/dev/null") != 0;
+
+if (defined $keep_quota && $keep_quota < 1) {
+   warn "ignoring invalid value of --keep parameter ($keep_quota)\n";
+}
 
 #---- MAIN ----
 
@@ -120,6 +138,17 @@ $freeze_cmd    = "xfs_freeze"
  $aws_access_key_id_file, $aws_secret_access_key_file,
  $aws_credentials_file,
 );
+
+# EC2 API object
+my $ec2_obj = ec2_api_obj($ec2_endpoint);
+exit(-1) unless ($ec2_obj);
+
+# Derive volume ids if specified
+if ($derive_volumes && @freeze_filesystem) {
+   derive_volumes($ec2_obj, \@freeze_filesystem, \@volume_ids);
+   pod2usage(2) unless (scalar @volume_ids);
+}
+
 die "$Prog: ERROR: Can't find AWS access key or secret access key"
   unless $use_iam_role or ($aws_access_key_id and $aws_secret_access_key);
 $Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
@@ -199,7 +228,11 @@ if ( scalar @freeze_filesystem > 0 ) {
 }
 
 my $success = 
-  ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions, \@tags);
+  ebs_snapshot($ec2_obj, \@volume_ids, \@descriptions, \@tags);
+
+if (defined $keep_quota && $keep_quota > 0) {
+   delete_old_snapshots($ec2_obj, \@volume_ids, $keep_quota);
+}
 
 exit ($success ? 0 : -1);
 
@@ -246,8 +279,8 @@ END {
 
 #---- METHODS ----
 
-sub ebs_snapshot {
-  my ($volume_ids, $ec2_endpoint, $descriptions, $tags) = @_;
+sub ec2_api_obj {
+  my ($ec2_endpoint) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": create EC2 object\n";
   $Debug and warn "$Prog: Endpoint: $ec2_endpoint\n" if $ec2_endpoint;
@@ -264,6 +297,12 @@ sub ebs_snapshot {
     warn "$Prog: ERROR: Unable to create EC2 connection";
     return undef;
   }
+
+  return $ec2;
+}
+
+sub ebs_snapshot {
+  my ($ec2, $volume_ids, $descriptions, $tags) = @_;
 
  VOLUME:
   for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
@@ -329,6 +368,251 @@ sub ebs_snapshot {
     }
   }
   return 1;
+}
+
+#
+# Deriving volume info
+#
+sub derive_volumes {
+   my ($ec2, $fs_list_ref, $vol_list_ref) = @_;
+   undef @$vol_list_ref;
+
+   # Get the id of the current EC2 instance
+   my $ua = start_ua();
+   my $instance_id = get_instance_id($ua);
+ 
+   # Get the mappings of EBS volumes to devices on this instance
+   my %deviceVolume;
+   get_instance_ebs_mappings($ec2, $instance_id, \%deviceVolume);
+
+   # Get the mappings of mountpoints to devices on this instance
+   my %mountDevice;
+   get_instance_ebs_mounts(\%mountDevice);
+ 
+   my %derivedVols;
+   for my $fs (@$fs_list_ref) {
+      if (! defined $mountDevice{$fs}) {
+         warn "$Prog: unable to determine device for '$fs' - NOT doing snapshot";
+         next;
+      }
+
+      my $device = $mountDevice{$fs};
+      if (! defined $deviceVolume{$device}) {
+         warn "$Prog: unable to determine volume for '$fs' ($device) - NOT doing snapshot";
+         next;
+      }
+
+      my $vol = $deviceVolume{$device};
+      $derivedVols{$vol}++;
+   }
+
+   if (keys %derivedVols) {
+      push @$vol_list_ref, keys(%derivedVols);
+   }
+}
+
+sub get_instance_ebs_mounts {
+   my ($hash_ref) = @_;
+   undef %$hash_ref;
+
+   my $lsblk = `lsblk`;
+   my @lines = split(/\n/, $lsblk);
+
+   for my $line (@lines) {
+      next if ($line =~ /^NAME/);
+      next if ($line =~ /\spart\s/);
+      my @words = split(/\s+/, $line);
+      next if (scalar(@words) < 7);
+
+      my $device = File::Spec->catfile('/dev', $words[0]);
+      $device = resolve_symlink($device);
+      my $mount  = $words[6];
+
+      $Debug and print "$device mounted on $mount\n";
+      $$hash_ref{$mount} = $device;
+   }
+}
+
+sub get_instance_ebs_mappings {
+   my ($ec2, $instance_id, $hash_ref) = @_;
+   undef %$hash_ref;
+
+   my $response;
+   eval {
+      $response = $ec2->describe_instance_attribute(
+         InstanceId => $instance_id,
+         Attribute  => 'blockDeviceMapping',
+      );
+   };   
+   if ($@){
+      warn "$Prog: ERROR: describe_instance_attribute: ", ec2_error_message($@);
+      return undef;
+   }
+
+   my @mapping = @{$response->{'block_device_mapping'}};
+
+   for my $map_ref (@mapping) {
+      my %map = %$map_ref;
+      my %ebs = %{$map{'ebs'}};
+
+      my $device = $map{'device_name'};
+      $device = resolve_symlink($device);
+
+      $Debug and print 'Device: ' . $device . "\n";
+      $Debug and print 'Volume: ' . $ebs{'volume_id'} . "\n\n";
+
+      $$hash_ref{$device} = $ebs{'volume_id'};
+   }
+}
+
+sub resolve_symlink {
+   my ($in_path) = @_;
+   return($in_path) if (! -l $in_path);
+
+   my $path = $in_path;
+   while (-l $path) {
+      my $target = readlink($path);
+      if ($target =~ /^\//) {
+         $path = $target;
+         next;
+      }
+      $path = File::Spec->catfile(dirname($path), $target);
+   }
+
+   $Debug and print "Resolved '$in_path' to '$path'\n";
+   return($path);
+}
+
+sub get_instance_id {
+   my ($ua) = @_;
+
+   my $ans;
+   get_url_resp($ua, 'GET', "http://169.254.169.254/latest/meta-data/instance-id", undef, \$ans);
+
+   $Debug and print "Instance ID: $ans\n\n";
+
+   return($ans);
+}
+
+sub start_ua() {
+   my $ua = LWP::UserAgent->new;
+   $ua->agent("MyApp/0.1");
+
+   return($ua);
+}
+
+sub get_url_resp($$$$$;$$) {
+   my ($ua, $request_type, $url, $post_content, $response, $login, $pw) = @_;
+
+   my $req = HTTP::Request->new($request_type => $url);
+
+   if ($login && $pw) {
+      $req->authorization_basic($login, $pw);
+   }
+
+   if ($request_type eq 'POST') {
+      $req->content_type('application/x-www-form-urlencoded');
+      $req->content($post_content);
+   }
+
+   my $res = $ua->request($req);
+   if ($res->is_success) {
+      $$response = $res->content;
+   } else {
+      $Debug and warn('header:' . $res->header("Server"));
+      $Debug and warn('content:' . $res->content);
+      die("Error doing '$request_type' of '$url': " . $res->status_line);
+   }
+}
+
+#
+# Deleting old snapshots
+#
+sub delete_old_snapshots {
+   my ($ec2, $volumes_ref, $keep_quota) = @_;
+
+   for my $volume_id (@$volumes_ref) {
+      my @snapshots;
+      get_volume_snapshots($ec2, $volume_id, \@snapshots);
+      next if (! @snapshots);
+
+      my @snapshots_to_del;
+      filter_oldest_snapshots_above_quota(\@snapshots, $keep_quota, \@snapshots_to_del);
+
+      for my $snap (@snapshots_to_del) {
+         delete_snapshot($ec2, $snap);
+      }
+   }
+}
+
+sub get_volume_snapshots {
+   my ($ec2, $volume_id, $list_ref) = @_;
+   undef @$list_ref;
+
+   my @filter = qw(volume-id);
+   push @filter, $volume_id;
+
+   my $response;
+   eval {
+      $response = $ec2->describe_snapshots(
+         Filter => \@filter,
+      );
+   };   
+   if ($@){
+      warn "$Prog: ERROR: describe_snapshots: ", ec2_error_message($@);
+      return undef;
+   }
+
+   $Debug and print "Found " . scalar(@$response) . " snapshots of '$volume_id'\n";
+
+   @$list_ref = @$response;
+}
+
+sub filter_oldest_snapshots_above_quota {
+   my ($snapshots_ref, $num_sought, $list_ref) = @_;
+   undef @$list_ref;
+
+   return if (scalar(@$snapshots_ref) < $num_sought);
+
+   my $num_over_quota = scalar(@$snapshots_ref) - $num_sought;
+
+   # Sort array by time the snapshots were created
+   my @sorted = sort {$$a{'start_time'} cmp $$b{'start_time'}} @$snapshots_ref;
+
+   # Get the oldest of these
+   splice(@sorted, $num_over_quota);
+   @$list_ref = @sorted;
+}
+
+sub delete_snapshot {
+   my ($ec2, $snapshot) = @_;
+
+   my $snapshot_id   = $snapshot->{'snapshot_id'};
+   my $snapshot_desc = $snapshot->{'description'};
+
+   $Debug and print "Deleting snaptshot '$snapshot_id' [$snapshot_desc]\n";
+
+   my $ret;
+   eval {
+      local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+      ualarm($snapshot_timeout * 1_000_000);
+      $ret = $ec2->delete_snapshot(
+         SnapshotId => $snapshot_id,
+      );
+      ualarm(0);
+   };
+   ualarm(0);
+
+   if ( $@  ){
+      warn "$Prog: ERROR: delete_snapshot: ", ec2_error_message($@);
+      return undef;
+   }
+
+   if (! $ret) {
+      warn "$Prog: Failed to delete snapshot '$snapshot_id'";
+   }
+
+   return $ret;
 }
 
 #
@@ -736,7 +1020,7 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 =head1 SYNOPSIS
 
- ec2-consistent-snapshot [opts] VOLUMEID...
+ ec2-consistent-snapshot [opts] (--derive-volumes | VOLUMEID...)
 
 =head1 OPTIONS
 
@@ -812,6 +1096,15 @@ fsfreeze comes with newer versions of util-linux.
 
 You may specify this option multiple times if you need to freeze multiple
 filesystems on the the EBS volume(s).
+
+=item --keep COUNT
+
+How many snapshots to keep. If set, the oldest snapshots for each volume
+(that has a new snapshot created by running this script) will be deleted
+until COUNT number of snapshots remain. For example, if there were 5
+snapshots of a volume before this script created the 6th for that volume,
+and the keep value is set to 4, then the oldest 2 snapshots will be deleted.
+By default no snapshots will be deleted.
 
 =item --mongo
 
@@ -901,6 +1194,13 @@ Command to run after MySQL stop/lock and before filesystem freeze.
 Command to run immediately after filesystem unfreeze and before MySQL
 start/unlock.
 
+=item --derive-volumes
+
+Rather than specifying the EBS volume id(s), derive the volumes to snapshot
+based on the list of filesystems that are being frozen. In this case, a
+snapshot will be created for each volume mounted on these filesystems.
+Only valid if used in combination with --freeze-filesystem option.
+
 =back
 
 =head1 ARGUMENTS
@@ -922,7 +1222,8 @@ database, if applicable.
 
 Filesystems can be frozen during the snapshot. Prior to Linux kernel
 2.6.29, XFS must be used for freezing support. While frozen, a filesystem
-will be consistent on disk and all writes will block.
+will be consistent on disk and all writes will block. If the option to freeze
+filesystems is used, you may also opt to derive the volumes to snapshot.
 
 There are a number of timeouts to reduce the risk of interfering with
 the normal database operation while improving the chances of getting a
@@ -938,6 +1239,10 @@ restore the RAID setup.
 If you have multiple EBS volumes which are hosting different file
 systems, it might be better to simply run the command once for each
 volume id.
+
+To help manage the number of snapshots created per volume, you may opt to set
+the number of snapshots to keep. If set, this will delete old snapshots if
+creating a new snapshot exceeds the quota for that volume.
 
 =head1 EXAMPLES
 

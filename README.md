@@ -4,7 +4,7 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 # SYNOPSIS
 
-    ec2-consistent-snapshot [opts] VOLUMEID...
+    ec2-consistent-snapshot [opts] (--derive-volumes | VOLUMEID...)
 
 # OPTIONS
 
@@ -75,6 +75,15 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
     You may specify this option multiple times if you need to freeze multiple
     filesystems on the the EBS volume(s).
+
+- \--keep COUNT
+
+    How many snapshots to keep. If set, the oldest snapshots for each volume
+    (that has a new snapshot created by running this script) will be deleted
+    until COUNT number of snapshots remain. For example, if there were 5
+    snapshots of a volume before this script created the 6th for that volume,
+    and the keep value is set to 4, then the oldest 2 snapshots will be deleted.
+    By default no snapshots will be deleted.
 
 - \--mongo
 
@@ -158,6 +167,13 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     Command to run immediately after filesystem unfreeze and before MySQL
     start/unlock.
 
+- \--derive-volumes
+
+    Rather than specifying the EBS volume id(s), derive the volumes to snapshot
+    based on the list of filesystems that are being frozen. In this case, a
+    snapshot will be created for each volume mounted on these filesystems.
+    Only valid if used in combination with \--freeze-filesystem option.
+
 # ARGUMENTS
 
 - VOLUMEID
@@ -173,7 +189,8 @@ database, if applicable.
 
 Filesystems can be frozen during the snapshot. Prior to Linux kernel
 2.6.29, XFS must be used for freezing support. While frozen, a filesystem
-will be consistent on disk and all writes will block.
+will be consistent on disk and all writes will block. If the option to freeze
+filesystems is used, you may also opt to derive the volumes to snapshot.
 
 There are a number of timeouts to reduce the risk of interfering with
 the normal database operation while improving the chances of getting a
@@ -189,6 +206,10 @@ restore the RAID setup.
 If you have multiple EBS volumes which are hosting different file
 systems, it might be better to simply run the command once for each
 volume id.
+
+To help manage the number of snapshots created per volume, you may opt to set
+the number of snapshots to keep. If set, this will delete old snapshots if
+creating a new snapshot will exceed the quota for that volume.
 
 # EXAMPLES
 
