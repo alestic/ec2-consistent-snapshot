@@ -39,6 +39,7 @@ my @descriptions               = ();
 my @tags                       = ();
 my $tag_separator              = ";";
 my @freeze_filesystem          = ();
+my $keep_quota;
 my $mongo                      = 0;
 my $mongo_username             = undef;
 my $mongo_password             = undef;
@@ -83,6 +84,7 @@ GetOptions(
   'tag=s'                        => \@tags,
   'xfs-filesystem=s'             => \@freeze_filesystem,
   'freeze-filesystem=s'          => \@freeze_filesystem,
+  'keep=s'                       => \$keep_quota,
   'mongo'                        => \$mongo,
   'mongo-username=s'             => \$mongo_username,
   'mongo-password=s'             => \$mongo_password,
@@ -124,6 +126,10 @@ $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 my $freeze_cmd = "fsfreeze";
 $freeze_cmd    = "xfs_freeze"
     if $freeze_cmd and system("which $freeze_cmd >/dev/null") != 0;
+
+if (defined $keep_quota && $keep_quota < 1) {
+   warn "ignoring invalid value of --keep parameter ($keep_quota)\n";
+}
 
 #---- MAIN ----
 
@@ -223,6 +229,10 @@ if ( scalar @freeze_filesystem > 0 ) {
 
 my $success = 
   ebs_snapshot($ec2_obj, \@volume_ids, \@descriptions, \@tags);
+
+if (defined $keep_quota && $keep_quota > 0) {
+   delete_old_snapshots($ec2_obj, \@volume_ids, $keep_quota);
+}
 
 exit ($success ? 0 : -1);
 
@@ -513,6 +523,96 @@ sub get_url_resp($$$$$;$$) {
       $Debug and warn('content:' . $res->content);
       die("Error doing '$request_type' of '$url': " . $res->status_line);
    }
+}
+
+#
+# Deleting old snapshots
+#
+sub delete_old_snapshots {
+   my ($ec2, $volumes_ref, $keep_quota) = @_;
+
+   for my $volume_id (@$volumes_ref) {
+      my @snapshots;
+      get_volume_snapshots($ec2, $volume_id, \@snapshots);
+      next if (! @snapshots);
+
+      my @snapshots_to_del;
+      filter_oldest_snapshots_above_quota(\@snapshots, $keep_quota, \@snapshots_to_del);
+
+      for my $snap (@snapshots_to_del) {
+         delete_snapshot($ec2, $snap);
+      }
+   }
+}
+
+sub get_volume_snapshots {
+   my ($ec2, $volume_id, $list_ref) = @_;
+   undef @$list_ref;
+
+   my @filter = qw(volume-id);
+   push @filter, $volume_id;
+
+   my $response;
+   eval {
+      $response = $ec2->describe_snapshots(
+         Filter => \@filter,
+      );
+   };   
+   if ($@){
+      warn "$Prog: ERROR: describe_snapshots: ", ec2_error_message($@);
+      return undef;
+   }
+
+   $Debug and print "Found " . scalar(@$response) . " snapshots of '$volume_id'\n";
+
+   @$list_ref = @$response;
+}
+
+sub filter_oldest_snapshots_above_quota {
+   my ($snapshots_ref, $num_sought, $list_ref) = @_;
+   undef @$list_ref;
+
+   return if (scalar(@$snapshots_ref) < $num_sought);
+
+   my $num_over_quota = scalar(@$snapshots_ref) - $num_sought;
+
+   # Sort array by time the snapshots were created
+   my @sorted = sort {$$a{'start_time'} cmp $$b{'start_time'}} @$snapshots_ref;
+
+   # Get the oldest of these
+   splice(@sorted, $num_over_quota);
+   @$list_ref = @sorted;
+}
+
+sub delete_snapshot {
+   my ($ec2, $snapshot) = @_;
+
+   my $snapshot_id   = $snapshot->{'snapshot_id'};
+   my $snapshot_desc = $snapshot->{'description'};
+
+   $Debug and print "Deleting snaptshot '$snapshot_id' [$snapshot_desc]\n";
+
+   my $ret;
+   eval {
+      local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+      ualarm($snapshot_timeout * 1_000_000);
+      $ret = $ec2->delete_snapshot(
+         SnapshotId => $snapshot_id,
+      );
+      ualarm(0);
+   };
+   ualarm(0);
+
+   if ( $@  ){
+      warn "$Prog: ERROR: delete_snapshot: ", ec2_error_message($@);
+      return undef;
+   }
+
+   if (! $ret) {
+      warn "$Prog: Failed to delete snapshot '$snapshot_id'";
+   }
+
+   return $ret;
 }
 
 #
@@ -997,6 +1097,15 @@ fsfreeze comes with newer versions of util-linux.
 You may specify this option multiple times if you need to freeze multiple
 filesystems on the the EBS volume(s).
 
+=item --keep COUNT
+
+How many snapshots to keep. If set, the oldest snapshots for each volume
+(that has a new snapshot created by running this script) will be deleted
+until COUNT number of snapshots remain. For example, if there were 5
+snapshots of a volume before this script created the 6th for that volume,
+and the keep value is set to 4, then the oldest 2 snapshots will be deleted.
+By default no snapshots will be deleted.
+
 =item --mongo
 
 Indicates that the volume contains data files for a running Mongo
@@ -1130,6 +1239,10 @@ restore the RAID setup.
 If you have multiple EBS volumes which are hosting different file
 systems, it might be better to simply run the command once for each
 volume id.
+
+To help manage the number of snapshots created per volume, you may opt to set
+the number of snapshots to keep. If set, this will delete old snapshots if
+creating a new snapshot exceeds the quota for that volume.
 
 =head1 EXAMPLES
 
