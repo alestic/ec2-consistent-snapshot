@@ -297,6 +297,10 @@ On Ubuntu 8.04 Hardy, use the following commands instead:
 The default values can be accepted for most of the prompts, though it
 is necessary to select a CPAN mirror on Hardy.
 
+On Amazon Linux, Use the following command. 
+
+     yum --enablerepo=epel install perl-Net-Amazon-EC2 perl-File-Slurp perl-DBI perl-DBD-MySQL perl-Net-SSLeay perl-IO-Socket-SSL perl-Time-HiRes perl-Params-Validate perl-DateTime-Format-ISO8601 perl-Date-Manip perl-Moose ca-certificates
+
 # SEE ALSO
 
 - Amazon EC2
