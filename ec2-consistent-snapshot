@@ -51,7 +51,6 @@ my $mysql_username             = undef;
 my $mysql_password             = undef;
 my $mysql_host                 = undef;
 my $mysql_stop                 = 0;
-my $mysql_kill_query           = 0;
 my $snapshot_timeout           = 10.0; # seconds
 my $lock_timeout               =  0.5; # seconds
 my $lock_tries                 = 60;
@@ -143,7 +142,7 @@ if ( scalar (@descriptions) == 1 ) {
   for ( my $index = 1; $index < scalar (@volume_ids); ++$index ) {
     $descriptions[$index] = $descriptions[0];
   }
-} 
+}
 
 die "$Prog: ERROR: Tags count (", scalar (@tags),
     ") does not match volumes count (", scalar (@volume_ids), ")"
@@ -156,7 +155,7 @@ if ( scalar (@tags) == 1 ) {
   for ( my $index = 1; $index < scalar (@volume_ids); ++$index ) {
     $tags[$index] = $tags[0];
   }
-} 
+}
 
 #
 # Mongo
@@ -175,6 +174,7 @@ if ( $mongo_stop ) {
 #
 my $mysql_stopped = undef;
 my $mysql_dbh = undef;
+my $mysql_kill_query = 0;
 if ( $mysql_stop ) {
   $mysql_stopped = mysql_stop();
 } elsif ( $mysql ) {
@@ -200,11 +200,14 @@ if ( scalar @freeze_filesystem > 0 ) {
   $filesystem_frozen = 1;
 }
 
-ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions, \@tags);
+my $success = 
+  ebs_snapshot(\@volume_ids, $ec2_endpoint, \@descriptions, \@tags);
 
-exit 0;
+exit ($success ? 0 : -1);
 
 END {
+  my $exit_status = $?;
+
   fs_thaw(\@freeze_filesystem) if $filesystem_frozen;
 
   if ( $post_thaw_command ) {
@@ -239,6 +242,8 @@ END {
   }
 
   $Debug and warn "$Prog: ", scalar localtime, ": done\n";
+
+  exit ($exit_status || $?);
 }
 
 #---- METHODS ----
@@ -256,12 +261,17 @@ sub ebs_snapshot {
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
-  
+
+  if ( not $ec2 ) {
+    warn "$Prog: ERROR: Unable to create EC2 connection";
+    return undef;
+  }
+
  VOLUME:
   for (my $index = 0; $index < scalar(@$volume_ids); ++$index ) {
     my $volume_id = $$volume_ids[$index];
     my $description = $$descriptions[$index];
-    
+
     $Debug and warn "$Prog: volume_id: $volume_id; description: $description\n";
 
     # Snapshot
@@ -294,8 +304,10 @@ sub ebs_snapshot {
     my $snapshot_id;
     if ( not defined $snapshot ) {
       warn "$Prog: ERROR: create_snapshot returned undef\n";
+      return undef;
     } elsif ( not ref $snapshot ) {
       warn "$Prog: ERROR: create_snapshot returned '$snapshot'\n";
+      return undef;
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
       if (scalar (@tags) > 0){
@@ -318,8 +330,10 @@ sub ebs_snapshot {
       for my $error ( @{$snapshot->errors} ) {
         warn "$Prog: ERROR: ".$error->message."\n";
       }
+      return undef;
     }
   }
+  return 1;
 }
 
 #
@@ -776,7 +790,7 @@ Quiet mode.
 
 =item -n --noaction
 
-Don't do it. Just say what you would have done.
+Dry run. Just say what you would have done, don't do it.
 
 =item --aws-access-key-id KEY
 
@@ -830,7 +844,7 @@ works on any filesystems that support freezing, provided the kernel
 you are using supports it. (Linux Ext3/4, ReiserFS, JFS, XFS.)
 fsfreeze comes with newer versions of util-linux.
 
-You may specify this option multiple times if you need to freeze multiple 
+You may specify this option multiple times if you need to freeze multiple
 filesystems on the the EBS volume(s).
 
 =item --mongo
@@ -839,7 +853,7 @@ Indicates that the volume contains data files for a running Mongo
 database, which will be flushed and locked during the snapshot.
 
 =item --mongo-host HOST
- 
+
 =item --mongo-port PORT
 
 =item --mongo-username USER
@@ -870,8 +884,8 @@ doesn't prevent writes by other users during the backup.
 
 =item --mysql-defaults-file FILE
 
-MySQL defaults file, containing host, username and password, this 
-option will ignore the --mysql-host, --mysql-username, 
+MySQL defaults file, containing host, username and password, this
+option will ignore the --mysql-host, --mysql-username,
 --mysql-password parameters
 
 =item --mysql-host HOST
@@ -934,7 +948,7 @@ start/unlock.
 =head1 ARGUMENTS
 
 =over
-    
+
 =item VOLUMEID
 
 EBS volume id(s) for which a snapshot is to be created.
@@ -1128,7 +1142,7 @@ Please report bugs at https://bugs.launchpad.net/ec2-consistent-snapshot
 =head1 CREDITS
 
 Thanks to the following for performing tests on early versions,
-providing feedback, bug reports, and patches:
+providing feature development, feedback, bug reports, and patches:
 
   David Erickson
   Steve Caldwell
@@ -1146,6 +1160,9 @@ providing feedback, bug reports, and patches:
   Eric Lubow
   Seth de l'Isle
   Peter Waller
+  yalamber
+  Daniel Beardsley
+  dileep-p
 
 =head1 AUTHOR/MAINTAINER
 

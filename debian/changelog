@@ -1,3 +1,31 @@
+ec2-consistent-snapshot (0.62) saucy; urgency=low
+
+  * Improve cleanup on database query timeouts and interrupts
+    thanks to Daniel Beardsley.
+    (fixes #23 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Fri, 11 Jul 2014 11:21:14 -0700
+
+ec2-consistent-snapshot (0.61) saucy; urgency=low
+
+  * Add more error checking and exit code.
+    (fixes #37 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Wed, 09 Jul 2014 13:00:09 -0700
+
+ec2-consistent-snapshot (0.60) saucy; urgency=low
+
+  * Add --tags option thanks to yalamber
+    (fixes #27 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Thu, 12 Jun 2014 12:20:43 -0700
+
+ec2-consistent-snapshot (0.59) saucy; urgency=low
+
+  * Tweak to --noaction documentation from phalgun
+
+ -- Eric Hammond <ehammond@thinksome.com>  Thu, 12 Jun 2014 12:12:02 -0700
+
 ec2-consistent-snapshot (0.58) saucy; urgency=low
 
   * Update docs

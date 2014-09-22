@@ -22,7 +22,7 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 - \-n --noaction
 
-    Don't do it. Just say what you would have done.
+    Dry run. Just say what you would have done, don't do it.
 
 - \--aws-access-key-id KEY
 - \--aws-secret-access-key SECRET
@@ -73,7 +73,7 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     you are using supports it. (Linux Ext3/4, ReiserFS, JFS, XFS.)
     fsfreeze comes with newer versions of util-linux.
 
-    You may specify this option multiple times if you need to freeze multiple 
+    You may specify this option multiple times if you need to freeze multiple
     filesystems on the the EBS volume(s).
 
 - \--mongo
@@ -82,7 +82,6 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     database, which will be flushed and locked during the snapshot.
 
 - \--mongo-host HOST
- 
 - \--mongo-port PORT
 - \--mongo-username USER
 - \--mongo-password PASS
@@ -103,8 +102,8 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 - \--mysql-defaults-file FILE
 
-    MySQL defaults file, containing host, username and password, this 
-    option will ignore the --mysql-host, --mysql-username, 
+    MySQL defaults file, containing host, username and password, this
+    option will ignore the --mysql-host, --mysql-username,
     \--mysql-password parameters
 
 - \--mysql-host HOST
@@ -298,6 +297,10 @@ On Ubuntu 8.04 Hardy, use the following commands instead:
 The default values can be accepted for most of the prompts, though it
 is necessary to select a CPAN mirror on Hardy.
 
+On Amazon Linux, Use the following command. 
+
+     yum --enablerepo=epel install perl-Net-Amazon-EC2 perl-File-Slurp perl-DBI perl-DBD-MySQL perl-Net-SSLeay perl-IO-Socket-SSL perl-Time-HiRes perl-Params-Validate perl-DateTime-Format-ISO8601 perl-Date-Manip perl-Moose ca-certificates
+
 # SEE ALSO
 
 - Amazon EC2
@@ -338,7 +341,7 @@ Please report bugs at https://bugs.launchpad.net/ec2-consistent-snapshot
 # CREDITS
 
 Thanks to the following for performing tests on early versions,
-providing feedback, bug reports, and patches:
+providing feature development, feedback, bug reports, and patches:
 
     David Erickson
     Steve Caldwell
@@ -356,6 +359,8 @@ providing feedback, bug reports, and patches:
     Eric Lubow
     Seth de l'Isle
     Peter Waller
+    yalamber
+    Daniel Beardsley
 
 # AUTHOR/MAINTAINER
 
