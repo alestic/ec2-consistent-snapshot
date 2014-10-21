@@ -137,6 +137,12 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     database.  The database is shutdown before the snapshot is initiated
     and restarted afterwards. \[EXPERIMENTAL\]
 
+- \--mysql-stop-slave-io
+
+    Issue a "STOP SLAVE IO_THREAD" before taking snapshot to stop disk
+    activity. Will also cause MySQL to flush RELAY logs for better consistency.
+    \[EXPERIMENTAL\]
+
 - \--snapshot-timeout SECONDS
 
     How many seconds to wait for the snapshot-create to return.  Defaults
