@@ -117,7 +117,7 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 - \--mysql-master-status-file FILE
 
-    Store the MASTER STATUS (or slave status if this server is a slave) 
+    Store both the MASTER STATUS (or slave status if this server is a slave) 
     output in a file on the snapshot. It will be removed after the EBS 
     snapshot is taken. This option will be ignored with --mysql-stop
     \[DEPRECATED in favor of mysql-status-file\] 
@@ -125,9 +125,9 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 - \--mysql-status-file FILE
    
-    Store the MASTER and SLAVE STATUS output in a file on the snapshot. It 
-    will be removed after the EBS snapshot is taken. This option will be 
-    ignored with --mysql-stop. This options is a more flexible alternative
+    Store both MASTER STATUS and SLAVE STATUS output in a file on the snapshot. 
+    It will be removed after the EBS snapshot is taken. This option will be 
+    ignored with --mysql-stop. This options is a more consistent alternative
     to --mysql-master-status-file
          
 
