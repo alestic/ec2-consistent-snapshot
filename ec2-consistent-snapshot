@@ -50,6 +50,7 @@ my $mysql_username             = undef;
 my $mysql_password             = undef;
 my $mysql_host                 = undef;
 my $mysql_stop                 = 0;
+my $percona                    = 0;
 my $snapshot_timeout           = 10.0; # seconds
 my $lock_timeout               =  0.5; # seconds
 my $lock_tries                 = 60;
@@ -91,6 +92,7 @@ GetOptions(
   'mysql-password=s'             => \$mysql_password,
   'mysql-host=s'                 => \$mysql_host,
   'mysql-stop'                   => \$mysql_stop,
+  'percona'                      => \$percona,
   'snapshot-timeout=s'           => \$snapshot_timeout,
   'lock-timeout=s'               => \$lock_timeout,
   'lock-tries=s'                 => \$lock_tries,
@@ -112,6 +114,8 @@ $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 my $freeze_cmd = "fsfreeze";
 $freeze_cmd    = "xfs_freeze"
     if $freeze_cmd and system("which $freeze_cmd >/dev/null") != 0;
+
+$mysql = 1 if $percona; # Percona is a variant of MySQL
 
 #---- MAIN ----
 
@@ -464,25 +468,44 @@ sub mysql_lock {
   # as this can interfere with long-running queries on the slaves.
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=0 }) unless $Noaction;
 
-  # Try a flush first without locking so the later flush with lock
-  # goes faster.  This may not be needed as it seems to interfere with
-  # some statements anyway.
-  sql_timeout_retry(
-    q{ FLUSH LOCAL TABLES },
-    "MySQL flush",
-    $lock_timeout,
-    $lock_tries,
-    $lock_sleep,
-  );
+  if ( $percona ) {
+    # http://www.percona.com/blog/2014/03/11/introducing-backup-locks-percona-server-2/
+    sql_timeout_retry(
+      q{ LOCK TABLES FOR BACKUP },
+      "Percona table lock",
+      $lock_timeout,
+      $lock_tries,
+      $lock_sleep,
+    );
 
-  # Get a lock on the entire database
-  sql_timeout_retry(
-    q{ FLUSH LOCAL TABLES WITH READ LOCK },
-    "MySQL flush & lock",
-    $lock_timeout,
-    $lock_tries,
-    $lock_sleep,
-  );
+    sql_timeout_retry(
+      q{ LOCK BINLOG FOR BACKUP },
+      "Percona binlog lock",
+      $lock_timeout,
+      $lock_tries,
+      $lock_sleep,
+    );
+  } else {
+    # Try a flush first without locking so the later flush with lock
+    # goes faster.  This may not be needed as it seems to interfere with
+    # some statements anyway.
+    sql_timeout_retry(
+      q{ FLUSH LOCAL TABLES },
+      "MySQL flush",
+      $lock_timeout,
+      $lock_tries,
+      $lock_sleep,
+    );
+
+    # Get a lock on the entire database
+    sql_timeout_retry(
+      q{ FLUSH LOCAL TABLES WITH READ LOCK },
+      "MySQL flush & lock",
+      $lock_timeout,
+      $lock_tries,
+      $lock_sleep,
+    );
+  }
 
   my ($mysql_logfile, $mysql_position,
       $mysql_binlog_do_db, $mysql_binlog_ignore_db);
@@ -532,7 +555,10 @@ sub mysql_unlock {
   my ($mysql_dbh) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": MySQL unlock\n";
-  $mysql_dbh->do(q{ UNLOCK TABLES }) unless $Noaction;
+  unless ( $Noaction ) {
+    $mysql_dbh->do(q{ UNLOCK TABLES });
+    $mysql_dbh->do(q{ UNLOCK BINLOG }) if $percona;
+  }
 
 }
 
@@ -869,6 +895,12 @@ with --mysql-stop
 Indicates that the volume contains data files for a running MySQL
 database.  The database is shutdown before the snapshot is initiated
 and restarted afterwards. [EXPERIMENTAL]
+
+=item --percona
+
+Indicates that the volume contains data files for a running Percona/MySQL
+database, which will be locked using Percona's unique backup locking commands.
+Note: this sets '--mysql' automatically.
 
 =item --snapshot-timeout SECONDS
 
