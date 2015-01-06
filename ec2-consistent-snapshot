@@ -477,14 +477,6 @@ sub mysql_lock {
       $lock_tries,
       $lock_sleep,
     );
-
-    sql_timeout_retry(
-      q{ LOCK BINLOG FOR BACKUP },
-      "Percona binlog lock",
-      $lock_timeout,
-      $lock_tries,
-      $lock_sleep,
-    );
   } else {
     # Try a flush first without locking so the later flush with lock
     # goes faster.  This may not be needed as it seems to interfere with
@@ -555,10 +547,7 @@ sub mysql_unlock {
   my ($mysql_dbh) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": MySQL unlock\n";
-  unless ( $Noaction ) {
-    $mysql_dbh->do(q{ UNLOCK TABLES });
-    $mysql_dbh->do(q{ UNLOCK BINLOG }) if $percona;
-  }
+  $mysql_dbh->do(q{ UNLOCK TABLES }) unless $Noaction;
 
 }
 
