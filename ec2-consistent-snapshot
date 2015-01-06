@@ -539,8 +539,6 @@ EOM
       close(MYSQLMASTERSTATUS);
     }
   }
-
-  return ($mysql_logfile, $mysql_position);
 }
 
 sub mysql_unlock {
