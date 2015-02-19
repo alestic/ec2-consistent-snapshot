@@ -846,6 +846,13 @@ $AWS_CREDENTIALS environment variable or the value $HOME/.awssecret
 The instance is part of an IAM role that that has permission to create
 snapshots so there is no need to specify access key or secret.
 
+=item --probe-ec2-instance-id
+
+When run from an ec2 instance this option will query 
+http://instance-data/latest/meta-data/instance-id to retrieve the
+instance ID.  Using just this option will result in a snapshot of
+all volumes attached to the instance.
+
 =item --probe-ec2-volumes EC2_INSTANCE_ID
 
 Retrieve a list of volumes attached to the specified EC2 instance
