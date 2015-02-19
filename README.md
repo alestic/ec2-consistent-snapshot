@@ -43,6 +43,19 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     key on seprate lines and in that order.  Defaults to contents of
     $AWS\_CREDENTIALS environment variable or the value $HOME/.awssecret
 
+- \--probe-ec2-instance-id
+    When run from an ec2 instance this option will query
+    http://instance-data/latest/meta-data/instance-id to retrieve the
+    instance ID. Using just this option will result in a snapshot of all
+    volumes attached to the instance.
+
+- \--probe-ec2-volumes EC2_INSTANCE_ID
+    Retrieve a list of volumes attached to the specified EC2 instance
+
+- \--probe-ec2-volumes-tag TAG
+    Filter the attached volumes to those with a tag key TAG, the value
+    is not checked.
+
 - \--use-iam-role
 
     The instance is part of an IAM role that that has permission to create

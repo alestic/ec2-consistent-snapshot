@@ -15,6 +15,7 @@ use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
+use LWP::Simple;
 
 #---- OPTIONS ----
 
@@ -29,6 +30,9 @@ my $aws_access_key_id_file     = $ENV{AWS_ACCESS_KEY_ID};
 my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
 my $use_iam_role               = 0;
+my $probe_ec2_volumes          = 0;
+my $probe_ec2_instance_id      = 0;
+my $probe_ec2_volumes_tag      = undef;
 my $region                     = undef;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
@@ -97,15 +101,15 @@ GetOptions(
   'lock-sleep=s'                 => \$lock_sleep,
   'pre-freeze-command=s'         => \$pre_freeze_command,
   'post-thaw-command=s'          => \$post_thaw_command,
-  'mongo-init=s'                       => \$mongo_init_script,
+  'mongo-init=s'                 => \$mongo_init_script,
+  'probe-ec2-volumes=s'          => \$probe_ec2_volumes,
+  'probe-ec2-volumes-tag=s'      => \$probe_ec2_volumes_tag,
+  'probe-ec2-instance-id'        => \$probe_ec2_instance_id
 ) or pod2usage(2);
 
 my $filesystem_frozen = 0;
 
 pod2usage(1) if $Help;
-
-my @volume_ids = @ARGV;
-pod2usage(2) unless scalar @volume_ids;
 
 $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 
@@ -123,6 +127,17 @@ $freeze_cmd    = "xfs_freeze"
 die "$Prog: ERROR: Can't find AWS access key or secret access key"
   unless $use_iam_role or ($aws_access_key_id and $aws_secret_access_key);
 $Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+
+my @volume_ids;
+if ($probe_ec2_instance_id) {
+  $probe_ec2_volumes = get("http://instance-data/latest/meta-data/instance-id");
+}
+if ($probe_ec2_volumes) {
+  @volume_ids = probe_volumes($aws_access_key_id, $aws_secret_access_key, $probe_ec2_volumes, $probe_ec2_volumes_tag);
+} else {
+  @volume_ids = @ARGV;
+}
+pod2usage(2) unless scalar @volume_ids;
 
 die "$Prog: ERROR: Descriptions count (", scalar (@descriptions),
     ") does not match volumes count (", scalar (@volume_ids), ")"
@@ -729,6 +744,53 @@ sub ec2_error_message {
     return $error;
 }
 
+sub probe_volumes {
+    my ($aws_access_key_id, $aws_secret_access_key, $ec2_instance_id, $target_tag) = @_;
+    my $ec2 = Net::Amazon::EC2->new(
+      ((! $use_iam_role) ? (AWSAccessKeyId  => $aws_access_key_id,) : () ),
+      ((! $use_iam_role) ? (SecretAccessKey => $aws_secret_access_key) : () ),
+      ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
+      # ($Debug ? (debug => 1) : ()),
+    );
+    if ( not $ec2 ) {
+      warn "$Prog: ERROR: Unable to create EC2 connection";
+      return undef;
+    }
+    my $res_info = $ec2->describe_instances(InstanceId => $ec2_instance_id);
+    if (not $res_info) {
+      warn "$Prog: ERROR: Unable to find instance by id $ec2_instance_id";
+      return undef;
+    }
+    my @potential_volumes = ();
+    for my $ec2_instance ( $ {$res_info}[0]->instances_set ) {
+        # RunningInstances
+        my $bdm = ${\$ec2_instance}->block_device_mapping;
+        foreach ( @{$bdm}) {
+            my $bdmapping = $_;
+            if (\$bdmapping) {
+            # EbsInstanceBlockDeviceMapping
+                push(@potential_volumes, ${\$bdmapping}->ebs->volume_id);
+            }
+        }
+    }
+    my $instance_volumes = $ec2->describe_volumes(VolumeId => \@potential_volumes);
+    my $volumes = ();
+    if ($target_tag) {
+      for my $volume ( @$instance_volumes ) {
+        for my $tags ($ec2->describe_tags("Filter.Name"=> "resource-id", "Filter.Value" => ${\$volume}->volume_id)) {
+          for my $tag (@$tags) {
+            if ($tag->key eq $target_tag) {
+              push(@$volumes, $volume);
+            }
+          }
+        }
+      }
+    } else {
+        $volumes = $instance_volumes;
+    }
+    return map { ${\$_}->volume_id  } @$volumes;
+}
+
 
 =head1 NAME
 
@@ -783,6 +845,22 @@ $AWS_CREDENTIALS environment variable or the value $HOME/.awssecret
 
 The instance is part of an IAM role that that has permission to create
 snapshots so there is no need to specify access key or secret.
+
+=item --probe-ec2-instance-id
+
+When run from an ec2 instance this option will query 
+http://instance-data/latest/meta-data/instance-id to retrieve the
+instance ID.  Using just this option will result in a snapshot of
+all volumes attached to the instance.
+
+=item --probe-ec2-volumes EC2_INSTANCE_ID
+
+Retrieve a list of volumes attached to the specified EC2 instance
+
+=item --probe-ec2-volumes-tag TAG
+
+Filter the attached volumes to those with a tag key TAG, the value
+is not checked.
 
 =item --region REGION
 
