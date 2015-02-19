@@ -15,6 +15,7 @@ use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
+use LWP::Simple;
 
 #---- OPTIONS ----
 
@@ -30,6 +31,7 @@ my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
 my $use_iam_role               = 0;
 my $probe_ec2_volumes          = 0;
+my $probe_ec2_instance_id      = 0;
 my $probe_ec2_volumes_tag      = undef;
 my $region                     = undef;
 my $ec2_endpoint               = undef;
@@ -101,7 +103,8 @@ GetOptions(
   'post-thaw-command=s'          => \$post_thaw_command,
   'mongo-init=s'                 => \$mongo_init_script,
   'probe-ec2-volumes=s'          => \$probe_ec2_volumes,
-  'probe-ec2-volumes-tag=s'      => \$probe_ec2_volumes_tag
+  'probe-ec2-volumes-tag=s'      => \$probe_ec2_volumes_tag,
+  'probe-ec2-instance-id'        => \$probe_ec2_instance_id
 ) or pod2usage(2);
 
 my $filesystem_frozen = 0;
@@ -126,15 +129,15 @@ die "$Prog: ERROR: Can't find AWS access key or secret access key"
 $Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
 
 my @volume_ids;
-
+if ($probe_ec2_instance_id) {
+  $probe_ec2_volumes = get("http://instance-data/latest/meta-data/instance-id");
+}
 if ($probe_ec2_volumes) {
   @volume_ids = probe_volumes($aws_access_key_id, $aws_secret_access_key, $probe_ec2_volumes, $probe_ec2_volumes_tag);
 } else {
   @volume_ids = @ARGV;
 }
 pod2usage(2) unless scalar @volume_ids;
-
-######## REMOVE ME
 
 die "$Prog: ERROR: Descriptions count (", scalar (@descriptions),
     ") does not match volumes count (", scalar (@volume_ids), ")"
