@@ -7,8 +7,11 @@ use warnings;
 (our $Prog) = ($0 =~ m%([^/]+)$%);
 use Getopt::Long;
 use Pod::Usage;
+use File::Basename qw(basename);
 use File::Slurp;
+use IO::Dir;
 use IO::Socket::SSL;
+use LWP::UserAgent qw();
 eval 'use Mozilla::CA';
 use Time::HiRes qw(ualarm usleep);
 use Net::Amazon::EC2 0.11;
@@ -35,6 +38,7 @@ my @descriptions               = ();
 my @tags                       = ();
 my $tag_separator              = ";";
 my @freeze_filesystem          = ();
+my @no_freeze_filesystem       = ();
 my $mongo                      = 0;
 my $mongo_username             = undef;
 my $mongo_password             = undef;
@@ -77,6 +81,7 @@ GetOptions(
   'tag=s'                        => \@tags,
   'xfs-filesystem=s'             => \@freeze_filesystem,
   'freeze-filesystem=s'          => \@freeze_filesystem,
+  'no-freeze-filesystem=s'       => \@no_freeze_filesystem,
   'mongo'                        => \$mongo,
   'mongo-username=s'             => \$mongo_username,
   'mongo-password=s'             => \$mongo_password,
@@ -105,7 +110,6 @@ my $filesystem_frozen = 0;
 pod2usage(1) if $Help;
 
 my @volume_ids = @ARGV;
-pod2usage(2) unless scalar @volume_ids;
 
 $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 
@@ -123,6 +127,11 @@ $freeze_cmd    = "xfs_freeze"
 die "$Prog: ERROR: Can't find AWS access key or secret access key"
   unless $use_iam_role or ($aws_access_key_id and $aws_secret_access_key);
 $Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+
+if ( scalar (@volume_ids) == 0 ) {
+  @volume_ids = discover_volume_ids($ec2_endpoint);
+}
+pod2usage(2) unless scalar @volume_ids;
 
 die "$Prog: ERROR: Descriptions count (", scalar (@descriptions),
     ") does not match volumes count (", scalar (@volume_ids), ")"
@@ -246,19 +255,26 @@ END {
 
 #---- METHODS ----
 
-sub ebs_snapshot {
-  my ($volume_ids, $ec2_endpoint, $descriptions, $tags) = @_;
+sub ec2_connection {
+  my ($ec2_endpoint) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": create EC2 object\n";
   $Debug and warn "$Prog: Endpoint: $ec2_endpoint\n" if $ec2_endpoint;
 
   # EC2 API object
-  my $ec2 = Net::Amazon::EC2->new(
+  return Net::Amazon::EC2->new(
     ((! $use_iam_role) ? (AWSAccessKeyId  => $aws_access_key_id,) : () ),
     ((! $use_iam_role) ? (SecretAccessKey => $aws_secret_access_key) : () ),
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
+}
+
+sub ebs_snapshot {
+  my ($volume_ids, $ec2_endpoint, $descriptions, $tags) = @_;
+
+  # EC2 API object
+  my $ec2 = ec2_connection($ec2_endpoint);
 
   if ( not $ec2 ) {
     warn "$Prog: ERROR: Unable to create EC2 connection";
@@ -329,6 +345,135 @@ sub ebs_snapshot {
     }
   }
   return 1;
+}
+
+sub get {
+  my ($url) = @_;
+
+  my $ua = LWP::UserAgent->new;
+  $ua->timeout(2);
+
+  my $response = $ua->get($url);
+
+  my $content;
+  if ($response->is_success) {
+    $content = $response->decoded_content;
+  } else {
+    $Debug and warn "$Prog: ", scalar localtime,
+                    ": Unable to fetch $url: @{[$response->status_line]}\n";
+  }
+
+  return $content;
+}
+
+sub ec2_instance_description {
+  my ($ec2_endpoint) = @_;
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": Determining instance id\n";
+
+  my $instance_id = get('http://169.254.169.254/latest/meta-data/instance-id');
+  unless ( defined $instance_id ) {
+    warn "$Prog: ERROR: Unable to determine instance id\n";
+    return undef;
+  }
+
+  my $ec2 = ec2_connection($ec2_endpoint);
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": Fetching instance description for $instance_id\n";
+  my $reservations = $ec2->describe_instances(InstanceId => $instance_id);
+  unless ( defined($reservations) && scalar(@$reservations) == 1 ) {
+    warn "$Prog: ERROR: Unable to find reservation for $instance_id\n";
+    return undef;
+  }
+
+  return $reservations->[0]->instances_set->[0];
+}
+
+sub discover_volume_ids {
+  my ($ec2_endpoint) = @_;
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": No volume ids specified; discovering volume ids\n";
+
+  my @filesystems = (@freeze_filesystem, @no_freeze_filesystem);
+
+  if ( scalar(@filesystems) == 0 ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+                    ": No filesystems specified; unable to discover volume ids\n";
+    return ();
+  }
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": Discovering volume ids for: @filesystems\n";
+
+  my $ec2_instance = ec2_instance_description($ec2_endpoint);
+  return () unless $ec2_instance;
+
+  # RunningInstances->block_device_mapping is a Maybe[ArrayRef]
+  unless ( $ec2_instance->block_device_mapping ) {
+    warn "$Prog: ERROR: Unable to find block device mappings for ", $ec2_instance->instance_id, "\n";
+    return ();
+  }
+
+  my %ebs_volume_ids = ();
+  for my $bd ( @{$ec2_instance->block_device_mapping} ) {
+    # BlockDeviceMapping->ebs is a Maybe[ArrayRef]
+    $ebs_volume_ids{$bd->device_name} = $bd->ebs->volume_id if $bd->ebs;
+  }
+
+  unless ( %ebs_volume_ids ) {
+    warn "$Prog: ERROR: Unable to find EBS block devices for ", $ec2_instance->instance_id, "\n";
+    return ();
+  }
+
+  if ( $Debug ) {
+    warn "$Prog: ", scalar localtime,
+         ": Found EBS block devices for ", $ec2_instance->instance_id, ": \n";
+    for my $dev (sort keys %ebs_volume_ids) {
+      warn "$Prog: ", scalar localtime, ":     ", $ebs_volume_ids{$dev}, " ", $dev, "\n";
+    }
+  }
+
+  my $volume_ids;
+  for my $fs (@filesystems) {
+    my $device = qx(mountpoint -dq "$fs");
+    chomp $device;
+    unless ($? == 0 && $device) {
+      warn "$Prog: ERROR: $fs is not a mount point\n";
+      return ();
+    }
+
+    # Check sysfs for a /slaves directory; if we find one, assume we have a
+    # compound device (e.g. LVM or Raid), otherwise, get the basename of the
+    # symlink at /sys/dev/block/MAJOR:MINOR
+    my $slaves = IO::Dir->new("/sys/dev/block/$device/slaves");
+    my @devices = ();
+    push @devices, grep { !/^\./ } $slaves->read() if defined($slaves);
+    push @devices, basename readlink("/sys/dev/block/$device") unless scalar(@devices);
+
+    if ( scalar(@devices) == 0 ) {
+      warn "$Prog: ERROR: Unable to determine devices for mount $fs\n";
+      return ();
+    }
+
+    for my $device (@devices) {
+      my $ec2_device = "/dev/$device";
+      $ec2_device =~ s/\bxvd/sd/;
+
+      my $volume_id = $ebs_volume_ids{$ec2_device};
+
+      unless ( defined $volume_id ) {
+        warn "$Prog: ERROR: Unable to determine volume id for device $device in mount $fs\n";
+        return ();
+      }
+
+      push @$volume_ids, $volume_id;
+    }
+  }
+
+  return @$volume_ids;
 }
 
 #
@@ -813,6 +958,19 @@ fsfreeze comes with newer versions of util-linux.
 You may specify this option multiple times if you need to freeze multiple
 filesystems on the the EBS volume(s).
 
+If no EBS volume ids are specified as command arguments, the specified
+mountpoints will be used along with mount points passed to
+--no-freeze-filesystem to determine the volume ids.
+
+=item --no-freeze-filesystem MOUNTPOINT
+
+Indicates that the filesystem at the specified mount point should be used for
+volume id discovery if no volume ids are specified as arguments, but that it
+should not be frozen.
+
+You may specify this options multiple times if you need to discover EBS volumes
+for multiple filesystems.
+
 =item --mongo
 
 Indicates that the volume contains data files for a running Mongo
@@ -983,6 +1141,11 @@ Snapshot two volumes with customized descriptions:
    --description "Description 2nd Volume"                     \
    vol-VOL1 vol-VOL2
 
+Snapshot a volume without specifying a volume id (requires ec2:DescribeInstances
+permission):
+
+ ec2-consistent-snapshot --freeze-filesystem /vol
+
 =head1 ENVIRONMENT
 
 =over
@@ -1053,6 +1216,18 @@ On Ubuntu 8.04 Hardy, use the following commands instead:
 
 The default values can be accepted for most of the prompts, though it
 is necessary to select a CPAN mirror on Hardy.
+
+=head1 VOLUME DISCOVERY
+
+If no EBS volume ids are passed as arguments to ec2-consistent-snapshot, it
+will attempt to discover the volume ids based on the mount points passed to
+--no-freeze-filesystem and --freeze-filesystem.
+
+In order to determine the volume ids, ec2-consistent-snapshot first makes a
+call to the EC2 instance metadata service to determine the instance's id. Next,
+it makes a call to the DescribeInstances EC2 api to get the list of volumes
+attached to the instance. It then compares the device names for each attachment
+with a list of device names determined using mountpoint(1) and sysfs.
 
 =head1 SEE ALSO
 
