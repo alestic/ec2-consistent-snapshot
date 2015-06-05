@@ -76,6 +76,19 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     You may specify this option multiple times if you need to freeze multiple
     filesystems on the the EBS volume(s).
 
+    If no EBS volume ids are specified as command arguments, the specified
+    mountpoints will be used along with mount points passed to
+    \--no-freeze-filesystem to determine the volume ids.
+
+- \--no-freeze-filesystem MOUNTPOINT
+
+    Indicates that the filesystem at the specified mount point should be used for
+    volume id discovery if no volume ids are specified as arguments, but that it
+    should not be frozen.
+
+    You may specify this options multiple times if you need to discover EBS volumes
+    for multiple filesystems.
+
 - \--mongo
 
     Indicates that the volume contains data files for a running Mongo
@@ -234,6 +247,11 @@ Snapshot two volumes with customized descriptions:
       --description "Description 2nd Volume"                     \
       vol-VOL1 vol-VOL2
 
+Snapshot a volume without specifying a volume id (requires ec2:DescribeInstances
+permission):
+
+    ec2-consistent-snapshot --freeze-filesystem /vol
+
 # ENVIRONMENT
 
 - $AWS\_ACCESS\_KEY\_ID
@@ -297,9 +315,17 @@ On Ubuntu 8.04 Hardy, use the following commands instead:
 The default values can be accepted for most of the prompts, though it
 is necessary to select a CPAN mirror on Hardy.
 
-On Amazon Linux, Use the following command. 
+# VOLUME DISCOVERY
 
-     yum --enablerepo=epel install perl-Net-Amazon-EC2 perl-File-Slurp perl-DBI perl-DBD-MySQL perl-Net-SSLeay perl-IO-Socket-SSL perl-Time-HiRes perl-Params-Validate perl-DateTime-Format-ISO8601 perl-Date-Manip perl-Moose ca-certificates
+If no EBS volume ids are passed as arguments to ec2-consistent-snapshot, it
+will attempt to discover the volume ids based on the mount points passed to
+\--no-freeze-filesystem and --freeze-filesystem.
+
+In order to determine the volume ids, ec2-consistent-snapshot first makes a
+call to the EC2 instance metadata service to determine the instance's id. Next,
+it makes a call to the DescribeInstances EC2 api to get the list of volumes
+attached to the instance. It then compares the device names for each attachment
+with a list of device names determined using mountpoint(1) and sysfs.
 
 # SEE ALSO
 
@@ -361,6 +387,8 @@ providing feature development, feedback, bug reports, and patches:
     Peter Waller
     yalamber
     Daniel Beardsley
+    dileep-p
+    theonlypippo
 
 # AUTHOR/MAINTAINER
 
