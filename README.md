@@ -130,15 +130,31 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 - \--mysql-master-status-file FILE
 
-    Store the MASTER STATUS output in a file on the snapshot. It will be
-    removed after the EBS snapshot is taken.  This option will be ignored
-    with --mysql-stop
+    Store both the MASTER STATUS (or slave status if this server is a slave) 
+    output in a file on the snapshot. It will be removed after the EBS 
+    snapshot is taken. This option will be ignored with --mysql-stop
+    \[DEPRECATED in favor of mysql-status-file\] 
+
+
+- \--mysql-status-file FILE
+   
+    Store both MASTER STATUS and SLAVE STATUS output in a file on the snapshot. 
+    It will be removed after the EBS snapshot is taken. This option will be 
+    ignored with --mysql-stop. This options is a more consistent alternative
+    to --mysql-master-status-file
+         
 
 - \--mysql-stop
 
     Indicates that the volume contains data files for a running MySQL
     database.  The database is shutdown before the snapshot is initiated
     and restarted afterwards. \[EXPERIMENTAL\]
+
+- \--mysql-stop-slave-io
+
+    Issue a "STOP SLAVE IO_THREAD" before taking snapshot to stop disk
+    activity. Will also cause MySQL to flush RELAY logs for better consistency.
+    \[EXPERIMENTAL\]
 
 - \--snapshot-timeout SECONDS
 

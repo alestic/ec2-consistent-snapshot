@@ -18,6 +18,7 @@ use Net::Amazon::EC2 0.11;
 use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
+use Sys::Hostname;
 
 #---- OPTIONS ----
 
@@ -49,11 +50,13 @@ my $mysql                      = 0;
 #my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
 my $mysql_defaults_file        = undef;
 my $mysql_socket               = undef;
+my $mysql_status_file          = undef;
 my $mysql_master_status_file   = undef;
 my $mysql_username             = undef;
 my $mysql_password             = undef;
 my $mysql_host                 = undef;
 my $mysql_stop                 = 0;
+my $mysql_stop_slave_io        = 0;
 my $snapshot_timeout           = 10.0; # seconds
 my $lock_timeout               =  0.5; # seconds
 my $lock_tries                 = 60;
@@ -92,10 +95,12 @@ GetOptions(
   'mysql-defaults-file=s'        => \$mysql_defaults_file,
   'mysql-socket=s'               => \$mysql_socket,
   'mysql-master-status-file=s'   => \$mysql_master_status_file,
+  'mysql-status-file=s'          => \$mysql_status_file,
   'mysql-username=s'             => \$mysql_username,
   'mysql-password=s'             => \$mysql_password,
   'mysql-host=s'                 => \$mysql_host,
   'mysql-stop'                   => \$mysql_stop,
+  'mysql-stop-slave-io'          => \$mysql_stop_slave_io,
   'snapshot-timeout=s'           => \$snapshot_timeout,
   'lock-timeout=s'               => \$lock_timeout,
   'lock-tries=s'                 => \$lock_tries,
@@ -227,6 +232,15 @@ END {
     if ( not $Noaction ) {
       unlink $mysql_master_status_file
         or die "$Prog: Couldn't remove file: $mysql_master_status_file: $!\n";
+    }
+  }
+
+  if ( defined($mysql_status_file) ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+      ": removing mysql status file: $mysql_status_file\n";
+    if ( not $Noaction ) {
+      unlink $mysql_status_file
+        or die "$Prog: Couldn't remove file: $mysql_status_file: $!\n";
     }
   }
 
@@ -609,6 +623,18 @@ sub mysql_lock {
   # as this can interfere with long-running queries on the slaves.
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=0 }) unless $Noaction;
 
+  # Stopping slave IO thread should prevent disk activity
+  # while taking snapshot
+  if ( $mysql_stop_slave_io ) {
+    sql_timeout_retry(
+      q{ STOP SLAVE IO_THREAD },
+      "MySQL stop slave io_thread",
+      $lock_timeout * $lock_tries, # Try only once, with high timeout
+      1,
+      0,
+    );
+  }
+
   # Try a flush first without locking so the later flush with lock
   # goes faster.  This may not be needed as it seems to interfere with
   # some statements anyway.
@@ -629,43 +655,97 @@ sub mysql_lock {
     $lock_sleep,
   );
 
-  my ($mysql_logfile, $mysql_position,
-      $mysql_binlog_do_db, $mysql_binlog_ignore_db);
-  if ( not $Noaction ) {
-    # This might be a slave database already
-    my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
-    $mysql_logfile           = $slave_status->{Slave_IO_State}
-                             ? $slave_status->{Master_Log_File}
-                             : undef;
-    $mysql_position          = $slave_status->{Read_Master_Log_Pos};
-    $mysql_binlog_do_db      = $slave_status->{Replicate_Do_DB};
-    $mysql_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
+  # Make sure we have consistent relay logs before taking snapshot
+  if ( $mysql_stop_slave_io ) {
+    sql_timeout_retry(
+      q{ FLUSH LOCAL RELAY LOGS },
+      "MySQL flush relay logs",
+      $lock_timeout * $lock_tries, # Try only once, with high timeout
+      1,
+      0,
+    );
+  }
 
-    # or this might be the master
+  my ($mysql_logfile, $mysql_position,
+      $mysql_master, $mysql_binlog_do_db, $mysql_binlog_ignore_db);
+  my ($mysql_slave_read_logfile, $mysql_slave_read_position,
+      $mysql_slave_exec_logfile, $mysql_slave_exec_position,
+      $mysql_slave_master, $mysql_slave_binlog_do_db, 
+      $mysql_slave_binlog_ignore_db);
+  if ( not $Noaction ) {
+    # Get slave database info 
+    my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
+    if ($mysql_stop_slave_io || $slave_status->{Slave_IO_State}){
+      $mysql_slave_master            = $slave_status->{Master_Host};
+      $mysql_slave_read_logfile      = $slave_status->{Master_Log_File};
+      $mysql_slave_read_position     = $slave_status->{Read_Master_Log_Pos};
+      $mysql_slave_exec_logfile      = $slave_status->{Relay_Master_Log_File};
+      $mysql_slave_exec_position     = $slave_status->{Exec_Master_Log_Pos};
+      $mysql_slave_binlog_do_db      = $slave_status->{Replicate_Do_DB};
+      $mysql_slave_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
+    }
+
+    # Get Master Position Info
+    $mysql_master = hostname;
     ($mysql_logfile, $mysql_position,
      $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
-      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  })
-      unless $mysql_logfile;
+      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  });
   }
 
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
 
-  print "$Prog: master_log_file=\"$mysql_logfile\",",
-              " master_log_pos=$mysql_position\n"
-    if $mysql_logfile and not $Quiet;
+  print "$Prog: master_log_file=\"",
+    ($mysql_slave_read_logfile?$mysql_slave_read_logfile:$mysql_logfile),
+    ",\", master_log_pos=",
+    ($mysql_slave_read_position?$mysql_slave_read_position:$mysql_position),
+    "\n" if $mysql_logfile and not $Quiet;
 
+  if ( defined($mysql_status_file) && $mysql_logfile ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+      ": writing MYSQL STATUS to $mysql_status_file\n";
+    if ( not $Noaction ) {
+      open(MYSQLSTATUS,"> $mysql_status_file") or
+        die "$Prog: Unable to open for write: $mysql_status_file: $!\n";
+      print MYSQLSTATUS <<"EOM";
+master_host="$mysql_master"
+master_log_file="$mysql_logfile"
+master_log_pos="$mysql_position"
+master_binlog_do_db="$mysql_binlog_do_db"
+master_binlog_ignore_db="$mysql_binlog_ignore_db"
+slave_master_host="$mysql_slave_master"
+slave_read_log_file="$mysql_slave_read_logfile"
+slave_read_log_pos="$mysql_slave_read_position"
+slave_exec_log_pos_log_file="$mysql_slave_exec_logfile"
+slave_exec_log_pos="$mysql_slave_exec_position"
+slave_binlog_do_db="$mysql_slave_binlog_do_db"
+slave_binlog_ignore_db="$mysql_slave_binlog_ignore_db"
+EOM
+      close(MYSQLSTATUS);
+    }
+  }
+
+  # Deprecated status file format
   if ( defined($mysql_master_status_file) && $mysql_logfile ) {
     $Debug and warn "$Prog: ", scalar localtime,
       ": writing MASTER STATUS to $mysql_master_status_file\n";
     if ( not $Noaction ) {
       open(MYSQLMASTERSTATUS,"> $mysql_master_status_file") or
         die "$Prog: Unable to open for write: $mysql_master_status_file: $!\n";
-      print MYSQLMASTERSTATUS <<"EOM";
+      if ( $mysql_slave_read_logfile) {
+        print MYSQLMASTERSTATUS <<"EOM";
+master_log_file="$mysql_slave_read_logfile"
+master_log_pos="$mysql_slave_read_position"
+master_binlog_do_db="$mysql_slave_binlog_do_db"
+master_binlog_ignore_db="$mysql_slave_binlog_ignore_db"
+EOM
+      }else{
+        print MYSQLMASTERSTATUS <<"EOM";
 master_log_file="$mysql_logfile"
 master_log_pos="$mysql_position"
 master_binlog_do_db="$mysql_binlog_do_db"
 master_binlog_ignore_db="$mysql_binlog_ignore_db"
 EOM
+      }
       close(MYSQLMASTERSTATUS);
     }
   }
@@ -679,6 +759,10 @@ sub mysql_unlock {
   $Debug and warn "$Prog: ", scalar localtime, ": MySQL unlock\n";
   $mysql_dbh->do(q{ UNLOCK TABLES }) unless $Noaction;
 
+  if ( $mysql_stop_slave_io ) {
+      $Debug and warn "$Prog: ", scalar localtime, ": MySQL start slave io_thread\n";
+      $mysql_dbh->do(q{ START SLAVE IO_THREAD }) unless $Noaction
+  }
 }
 
 sub mysql_stop {
@@ -1017,16 +1101,30 @@ lock tables.  User must have appropriate permissions.  Defaults to
 $HOME/.my.cnf file contents.
 
 =item --mysql-master-status-file FILE
+    
+Store both the MASTER STATUS (or slave status if this server is a slave) 
+output in a file on the snapshot. It will be removed after the EBS 
+snapshot is taken. This option will be ignored with --mysql-stop
+\[DEPRECATED in favor of mysql-status-file\] 
 
-Store the MASTER STATUS output in a file on the snapshot. It will be
-removed after the EBS snapshot is taken.  This option will be ignored
-with --mysql-stop
+=item --mysql--status-file FILE
+    
+Store both MASTER STATUS and SLAVE STATUS output in a file on the snapshot. 
+It will be removed after the EBS snapshot is taken. This option will be 
+ignored with --mysql-stop. This options is a more consistent alternative
+to --mysql-master-status-file
 
 =item --mysql-stop
 
 Indicates that the volume contains data files for a running MySQL
 database.  The database is shutdown before the snapshot is initiated
 and restarted afterwards. [EXPERIMENTAL]
+
+=item --mysql-stop-slave-io
+
+Issue a "STOP SLAVE IO_THREAD" before taking snapshot to stop disk
+activity. Will also cause MySQL to flush RELAY logs for better consistency.
+[EXPERIMENTAL]
 
 =item --snapshot-timeout SECONDS
 
