@@ -331,7 +331,7 @@ with a list of device names determined using mountpoint(1) and sysfs.
 
 - Amazon EC2
 - Amazon EC2 EBS (Elastic Block Store)
-- ec2-create-snapshot
+- [aws ec2 create-snapshot](http://docs.aws.amazon.com/cli/latest/reference/ec2/create-snapshot.html)
 
 # CAVEATS
 
