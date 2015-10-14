@@ -486,15 +486,13 @@ sub mongo_connect {
   MongoDB->import;
   require MongoDB::Database;
   MongoDB::Database->import;
-  require MongoDB::Admin;
-  MongoDB::Admin->import;
 
   $mongo_host ||= 'localhost';
 
   $Debug and warn "$Prog: ", scalar localtime,
                   ": mongo connect on ${mongo_host}:${mongo_port}\n";
 
-  my $mongo_conn = MongoDB::Connection->new(host => "${mongo_host}:${mongo_port}")
+  my $mongo_conn = MongoDB::MongoClient->new(host => "${mongo_host}:${mongo_port}")
     or die "$Prog: ERROR: Unable to connect to mongo"
          . " on $mongo_host";
 
@@ -504,11 +502,7 @@ sub mongo_connect {
            . " on $mongo_host as $mongo_username";
   }
 
-  my $mongo_dbh = MongoDB::Admin->new(connection => $mongo_conn)
-    or die "$Prog: ERROR: Unable to get Mongo admin connection"
-           . " on $mongo_host";
-
-  return $mongo_dbh;
+  return $mongo_conn;
 }
 
 sub mongo_lock {
@@ -520,7 +514,7 @@ sub mongo_lock {
   if ( $Noaction ) {
     warn "mongo lock SKIPPED (--noaction)\n";
   }
-  $mongo_dbh->fsync_lock();
+  $mongo_dbh->fsync({lock => 1});
 
   $Debug and warn "$Prog: ", scalar localtime, ": mongo locked\n";
 
@@ -536,7 +530,7 @@ sub mongo_unlock {
   if ( $Noaction ) {
     warn "mongo unlock SKIPPED (--noaction)\n";
   }
-  $mongo_dbh->unlock();
+  $mongo_dbh->fsync_unlock();
 
   $Debug and warn "$Prog: ", scalar localtime, ": mongo unlocked\n";
 
