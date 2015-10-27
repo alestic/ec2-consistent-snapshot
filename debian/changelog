@@ -1,4 +1,4 @@
-ec2-consistent-snapshot (0.64) UNRELEASED; urgency=medium
+ec2-consistent-snapshot (0.64) vivid; urgency=medium
 
   * Add --signature-version option.
     thanks to Tobias Lindgren
@@ -13,7 +13,7 @@ ec2-consistent-snapshot (0.64) UNRELEASED; urgency=medium
     thanks to Tim McEwan
     (pull request #50)
 
- -- Eric Hammond <ehammond@thinksome.com>  Mon, 26 Oct 2015 19:17:39 -0700
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 26 Oct 2015 19:55:12 -0700
 
 ec2-consistent-snapshot (0.63) trusty; urgency=medium
 
