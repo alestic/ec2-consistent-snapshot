@@ -9,6 +9,9 @@ ec2-consistent-snapshot (0.64) UNRELEASED; urgency=medium
   * Reference aws-cli instead of old command
     thanks to Mark Stosberg
     (pull request #58 on github)
+  * Add --percona option for for FLUSH LOCAL TABLES issues
+    thanks to Tim McEwan
+    (pull request #50)
 
  -- Eric Hammond <ehammond@thinksome.com>  Mon, 26 Oct 2015 19:17:39 -0700
 
