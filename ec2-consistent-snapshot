@@ -33,7 +33,7 @@ my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
 my $use_iam_role               = 0;
 my $region                     = undef;
-my $signature_version          = 4;
+my $signature_version          = undef;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
 my @tags                       = ();
@@ -275,8 +275,7 @@ sub ec2_connection {
     ((! $use_iam_role) ? (AWSAccessKeyId  => $aws_access_key_id,) : () ),
     ((! $use_iam_role) ? (SecretAccessKey => $aws_secret_access_key) : () ),
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
-    signature_version => $signature_version,
-    region => $region,
+    ($signature_version ? (signature_version => $signature_version) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
 }
