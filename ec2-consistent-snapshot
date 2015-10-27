@@ -33,6 +33,7 @@ my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
 my $use_iam_role               = 0;
 my $region                     = undef;
+my $signature_version          = 4;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
 my @tags                       = ();
@@ -76,6 +77,7 @@ GetOptions(
   'aws-credentials-file=s'       => \$aws_credentials_file,
   'use-iam-role'                 => \$use_iam_role,
   'region=s'                     => \$region,
+  'signature-version=s'          => \$signature_version,
   'ec2-endpoint=s'               => \$ec2_endpoint,
   'description=s'                => \@descriptions,
   'tag=s'                        => \@tags,
@@ -266,6 +268,8 @@ sub ec2_connection {
     ((! $use_iam_role) ? (AWSAccessKeyId  => $aws_access_key_id,) : () ),
     ((! $use_iam_role) ? (SecretAccessKey => $aws_secret_access_key) : () ),
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
+    signature_version => $signature_version,
+    region => $region,
     # ($Debug ? (debug => 1) : ()),
   );
 }
@@ -1291,6 +1295,7 @@ providing feature development, feedback, bug reports, and patches:
   Daniel Beardsley
   dileep-p
   theonlypippo
+  Tobias Lindgren
 
 =head1 AUTHOR/MAINTAINER
 
