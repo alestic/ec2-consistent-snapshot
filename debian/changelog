@@ -3,6 +3,12 @@ ec2-consistent-snapshot (0.64) UNRELEASED; urgency=medium
   * Add --signature-version option.
     thanks to Tobias Lindgren
     (fixes #59 on github)
+  * Replace MongoDB::Connection and Admin with MongoClient
+    thanks to nbfowler
+    (pull request #62 on github)
+  * Reference aws-cli instead of old command
+    thanks to Mark Stosberg
+    (pull request #58 on github)
 
  -- Eric Hammond <ehammond@thinksome.com>  Mon, 26 Oct 2015 19:17:39 -0700
 
