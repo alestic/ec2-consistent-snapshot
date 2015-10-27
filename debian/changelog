@@ -1,6 +1,6 @@
 ec2-consistent-snapshot (0.64) vivid; urgency=medium
 
-  * Add --signature-version option.
+  * Add --signature-version option
     thanks to Tobias Lindgren
     (fixes #59 on github)
   * Replace MongoDB::Connection and Admin with MongoClient
