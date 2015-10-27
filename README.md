@@ -140,6 +140,12 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     database.  The database is shutdown before the snapshot is initiated
     and restarted afterwards. \[EXPERIMENTAL\]
 
+- \--percona
+
+    Indicates that the volume contains data files for a running Percona/MySQL
+    database, which will be locked using Percona's unique backup locking commands.
+    Note: this sets '--mysql' automatically.
+
 - \--snapshot-timeout SECONDS
 
     How many seconds to wait for the snapshot-create to return.  Defaults
