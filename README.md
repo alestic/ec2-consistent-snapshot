@@ -8,52 +8,52 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 # OPTIONS
 
-- \-h --help
+- -h --help
 
     Print help and exit.
 
-- \-d --debug
+- -d --debug
 
     Debug mode.
 
-- \-q --quiet
+- -q --quiet
 
     Quiet mode.
 
-- \-n --noaction
+- -n --noaction
 
     Dry run. Just say what you would have done, don't do it.
 
-- \--aws-access-key-id KEY
-- \--aws-secret-access-key SECRET
+- --aws-access-key-id KEY
+- --aws-secret-access-key SECRET
 
     Amazon AWS access key and secret access key.  Defaults to
     environment variables or .awssecret file contents described below.
 
-- \--aws-access-key-id-file KEYFILE
-- \--aws-secret-access-key-file SECRETFILE
+- --aws-access-key-id-file KEYFILE
+- --aws-secret-access-key-file SECRETFILE
 
     Files containing Amazon AWS access key and secret access key.
     Defaults to environment variables or .awssecret file contents
     described below.
 
-- \--aws-credentials-file CREDENTIALSFILE
+- --aws-credentials-file CREDENTIALSFILE
 
     File containing both the Amazon AWS access key and secret access
     key on seprate lines and in that order.  Defaults to contents of
     $AWS\_CREDENTIALS environment variable or the value $HOME/.awssecret
 
-- \--use-iam-role
+- --use-iam-role
 
     The instance is part of an IAM role that that has permission to create
     snapshots so there is no need to specify access key or secret.
 
-- \--region REGION
+- --region REGION
 
     Specify a different EC2 region like "eu-west-1".  Defaults to
     "us-east-1".
 
-- \--description DESCRIPTION
+- --description DESCRIPTION
 
     Specify a description string for the EBS snapshot.  Defaults to the
     name of the program.
@@ -63,8 +63,8 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     times descriptions count has to match volumes count and they will be
     applied on the same order.
 
-- \--freeze-filesystem MOUNTPOINT
-- \--xfs-filesystem MOUNTPOINT \[OBSOLESCENT form of the same option\]
+- --freeze-filesystem MOUNTPOINT
+- --xfs-filesystem MOUNTPOINT \[OBSOLESCENT form of the same option\]
 
     Indicates that the filesystem at the specified mount point should be
     flushed and frozen during the snapshot. Requires the xfs\_freeze or
@@ -80,7 +80,7 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     mountpoints will be used along with mount points passed to
     \--no-freeze-filesystem to determine the volume ids.
 
-- \--no-freeze-filesystem MOUNTPOINT
+- --no-freeze-filesystem MOUNTPOINT
 
     Indicates that the filesystem at the specified mount point should be used for
     volume id discovery if no volume ids are specified as arguments, but that it
@@ -89,90 +89,90 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     You may specify this options multiple times if you need to discover EBS volumes
     for multiple filesystems.
 
-- \--mongo
+- --mongo
 
     Indicates that the volume contains data files for a running Mongo
     database, which will be flushed and locked during the snapshot.
 
-- \--mongo-host HOST
-- \--mongo-port PORT
-- \--mongo-username USER
-- \--mongo-password PASS
+- --mongo-host HOST
+- --mongo-port PORT
+- --mongo-username USER
+- --mongo-password PASS
 
     Mongo host, port, username, and password used to flush logs if there
     is authentication required on the admin database.
 
-- \--mongo-stop
+- --mongo-stop
 
     Indicates that the volume contains data files for a running Mongo
     instance.  The instance is shutdown before the snapshot is initiated
     and restarted afterwards. \[EXPERIMENTAL\]
 
-- \--mysql
+- --mysql
 
     Indicates that the volume contains data files for a running MySQL
     database, which will be flushed and locked during the snapshot.
 
-- \--mysql-defaults-file FILE
+- --mysql-defaults-file FILE
 
     MySQL defaults file, containing host, username and password, this
     option will ignore the --mysql-host, --mysql-username,
     \--mysql-password parameters
 
-- \--mysql-host HOST
-- \--mysql-socket PATH
-- \--mysql-username USER
-- \--mysql-password PASS
+- --mysql-host HOST
+- --mysql-socket PATH
+- --mysql-username USER
+- --mysql-password PASS
 
     MySQL host, socket path, username, and password used to flush logs and
     lock tables.  User must have appropriate permissions.  Defaults to
     $HOME/.my.cnf file contents.
 
-- \--mysql-master-status-file FILE
+- --mysql-master-status-file FILE
 
     Store the MASTER STATUS output in a file on the snapshot. It will be
     removed after the EBS snapshot is taken.  This option will be ignored
     with --mysql-stop
 
-- \--mysql-stop
+- --mysql-stop
 
     Indicates that the volume contains data files for a running MySQL
     database.  The database is shutdown before the snapshot is initiated
     and restarted afterwards. \[EXPERIMENTAL\]
 
-- \--percona
+- --percona
 
     Indicates that the volume contains data files for a running Percona/MySQL
     database, which will be locked using Percona's unique backup locking commands.
     Note: this sets '--mysql' automatically.
 
-- \--snapshot-timeout SECONDS
+- --snapshot-timeout SECONDS
 
     How many seconds to wait for the snapshot-create to return.  Defaults
     to 10.0
 
-- \--lock-timeout SECONDS
+- --lock-timeout SECONDS
 
     How many seconds to wait for a database lock. Defaults to 0.5.
     Making this too large can force other processes to wait while this
     process waits for a lock.  Better to make it small and try lots of
     times.
 
-- \--lock-tries COUNT
+- --lock-tries COUNT
 
     How many times to try to get a database lock before failing.  Defaults
     to 60.
 
-- \--lock-sleep SECONDS
+- --lock-sleep SECONDS
 
     How many seconds to sleep between database lock tries.  Defaults
     to 5.0.
 
-- \--pre-freeze-command COMMAND
+- --pre-freeze-command COMMAND
 
     Command to run after MySQL stop/lock and before filesystem freeze.
 
-- \--post-thaw-command COMMAND
+- --post-thaw-command COMMAND
 
     Command to run immediately after filesystem unfreeze and before MySQL
     start/unlock.
@@ -290,7 +290,7 @@ permission):
 
 # INSTALLATION
 
-On most Ubuntu releases, the __ec2-consistent-snapshot__ package can be
+On most Ubuntu releases, the **ec2-consistent-snapshot** package can be
 installed directly from the Alestic.com PPA using the following
 commands:
 
@@ -337,7 +337,7 @@ with a list of device names determined using mountpoint(1) and sysfs.
 
 - Amazon EC2
 - Amazon EC2 EBS (Elastic Block Store)
-- [aws ec2 create-snapshot](http://docs.aws.amazon.com/cli/latest/reference/ec2/create-snapshot.html)
+- ec2-create-snapshot
 
 # CAVEATS
 
@@ -395,6 +395,10 @@ providing feature development, feedback, bug reports, and patches:
     Daniel Beardsley
     dileep-p
     theonlypippo
+    Tobias Lindgren
+    nbfowler
+    Mark Stosberg
+    Tim McEwan
 
 # AUTHOR/MAINTAINER
 
