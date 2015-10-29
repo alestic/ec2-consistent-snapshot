@@ -275,6 +275,7 @@ sub ec2_connection {
     ((! $use_iam_role) ? (AWSAccessKeyId  => $aws_access_key_id,) : () ),
     ((! $use_iam_role) ? (SecretAccessKey => $aws_secret_access_key) : () ),
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
+    ($region ? (region => $region) : ()),
     ($signature_version ? (signature_version => $signature_version) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
