@@ -352,6 +352,10 @@ without specifying the volume ID.
         ]
     }
 
+If you get an "unauthorized" error when using the `--use-iam-role` option, you
+can use the `--debug` option to confirm whether it was the
+`DescribeInstances` or `CreateSnapshot` API call that failed.
+
 You might also use IAM policies to allow automating deleting old snapshots
 through another tool. Using a separate policy is recommended for that. By
 putting the "delete" permission in the same policy, you would be allowing
@@ -439,11 +443,11 @@ providing feature development, feedback, bug reports, and patches:
 
 # AUTHOR/MAINTAINER
 
-Eric Hammond &lt;ehammond@thinksome.com>
+Eric Hammond <ehammond@thinksome.com>
 
 # LICENSE
 
-Copyright 2009-2014 Eric Hammond &lt;ehammond@thinksome.com>
+Copyright 2009-2015 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

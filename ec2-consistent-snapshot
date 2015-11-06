@@ -1271,6 +1271,7 @@ without specifying the volume ID.
             }
         ]
     }
+
 If you get an "unauthorized" error when using the C<--use-iam-role> option, you
 can use the C<--debug> option to confirm whether it was the
 C<DescribeInstances> or C<CreateSnapshot> API call that failed.
@@ -1372,7 +1373,7 @@ Eric Hammond <ehammond@thinksome.com>
 
 =head1 LICENSE
 
-Copyright 2009-2014 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2015 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
