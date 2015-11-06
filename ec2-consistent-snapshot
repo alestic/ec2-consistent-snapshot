@@ -301,7 +301,7 @@ sub ebs_snapshot {
 
     # Snapshot
     $Debug and
-      warn "$Prog: ", scalar localtime, ": ec2-create-snapshot $volume_id\n";
+      warn "$Prog: ", scalar localtime, ": aws ec2 create-snapshot $volume_id\n";
     if ( $Noaction ) {
       warn "snapshot SKIPPED (--noaction)\n";
       next VOLUME;
@@ -1261,7 +1261,7 @@ with a list of device names determined using mountpoint(1) and sysfs.
 
 =item Amazon EC2 EBS (Elastic Block Store)
 
-=item ec2-create-snapshot
+=item L<aws ec2 create-snapshot|http://docs.aws.amazon.com/cli/latest/reference/ec2/create-snapshot.html>
 
 =back
 
