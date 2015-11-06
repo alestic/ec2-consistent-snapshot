@@ -46,7 +46,8 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 - --use-iam-role
 
     The instance is part of an IAM role that that has permission to create
-    snapshots so there is no need to specify access key or secret.
+    snapshots so there is no need to specify access key or secret. See ["IAM ROLES"](#iam-roles)
+    section for an example Managed Policy with the required permissions.
 
 - --region REGION
 
@@ -321,6 +322,42 @@ On Ubuntu 8.04 Hardy, use the following commands instead:
 The default values can be accepted for most of the prompts, though it
 is necessary to select a CPAN mirror on Hardy.
 
+<a name="iam-roles"></a>
+
+# IAM ROLES
+
+When authenticating using a IAM Role your role must have the appropriate
+permissions.  You can create a single IAM Managed Policy that allows the
+necessary permissions and attach the managed policy to each IAM role you would
+like to allow to create EC2 snapshots.
+
+The following policy allows both creating the snapshots as the read-only
+`DescribeInstances` permission which is required if you want to snapshot a volume
+without specifying the volume ID.
+
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "1",
+                "Effect": "Allow",
+                "Action": [
+                    "ec2:CreateSnapshot",
+                    "ec2:DescribeInstances"
+                ],
+                "Resource": [
+                    "*"
+                ]
+            }
+        ]
+    }
+
+You might also use IAM policies to allow automating deleting old snapshots
+through another tool. Using a separate policy is recommended for that. By
+putting the "delete" permission in the same policy, you would be allowing
+someone with access to one of your EC2 instances to delete the backups of the
+instance volumes. Instead, carefully restrict the delete permission.
+
 # VOLUME DISCOVERY
 
 If no EBS volume ids are passed as arguments to ec2-consistent-snapshot, it
@@ -337,7 +374,7 @@ with a list of device names determined using mountpoint(1) and sysfs.
 
 - Amazon EC2
 - Amazon EC2 EBS (Elastic Block Store)
-- ec2-create-snapshot
+- [aws ec2 create-snapshot](http://docs.aws.amazon.com/cli/latest/reference/ec2/create-snapshot.html)
 
 # CAVEATS
 
@@ -402,11 +439,11 @@ providing feature development, feedback, bug reports, and patches:
 
 # AUTHOR/MAINTAINER
 
-Eric Hammond <ehammond@thinksome.com>
+Eric Hammond &lt;ehammond@thinksome.com>
 
 # LICENSE
 
-Copyright 2009-2014 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2014 Eric Hammond &lt;ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
