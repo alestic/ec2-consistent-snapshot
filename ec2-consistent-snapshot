@@ -135,7 +135,13 @@ die "$Prog: ERROR: The --percona and --mysql-master-status-file options are mutu
 );
 die "$Prog: ERROR: Can't find AWS access key or secret access key"
   unless $use_iam_role or ($aws_access_key_id and $aws_secret_access_key);
-$Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+if ( $Debug && $use_iam_role ) {
+    warn "$Prog: Authenticating with IAM role\n";
+}
+elsif ( $Debug ) {
+    warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+}
+
 
 if ( scalar (@volume_ids) == 0 ) {
   @volume_ids = discover_volume_ids($ec2_endpoint);
