@@ -341,20 +341,12 @@ sub ebs_snapshot {
       return undef;
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
-      if (scalar (@tags) > 0){
-        my $tag = $$tags[$index];
-        my @sep_tags = split($tag_separator, $tag);
-        if(scalar (@sep_tags) > 0){
-          my %snapshot_tag;
-          for ( my $tag_index = 0; $tag_index < scalar (@sep_tags); ++$tag_index ) {
-            my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
-            $snapshot_tag{$tag_key} = $tag_value;
-          }
-          $ec2->create_tags(
+      my $snapshot_tag = _get_snapshot_tags(\@tags,$index);
+      if (keys %$snapshot_tag){
+        $ec2->create_tags(
             ResourceId    => $snapshot_id,
-            Tags          => \%snapshot_tag,
-          );
-        }
+            Tags          => $snapshot_tag,
+        );
       }
       $Quiet or print "$snapshot_id\n";
     } else {
@@ -365,6 +357,24 @@ sub ebs_snapshot {
     }
   }
   return 1;
+}
+
+# Given array of tags and an index, parse them and return tags for a specific volumme
+sub _get_snapshot_tags {
+   my ($tags,$index) = @_;
+   my %snapshot_tag;	
+   if (scalar @$tags > 0){
+     my $tag = $tags->[$index];
+     my @sep_tags = split($tag_separator, $tag);
+     if(scalar (@sep_tags) > 0){
+       my %snapshot_tag;
+       for ( my $tag_index = 0; $tag_index < scalar (@sep_tags); ++$tag_index ) {
+         my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
+         $snapshot_tag{$tag_key} = $tag_value;
+       }
+     }
+   }
+   return \%snapshot_tag;	
 }
 
 sub get {
