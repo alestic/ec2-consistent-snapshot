@@ -308,26 +308,29 @@ sub ebs_snapshot {
     # Snapshot
     $Debug and
       warn "$Prog: ", scalar localtime, ": aws ec2 create-snapshot $volume_id\n";
-    if ( $Noaction ) {
-      warn "snapshot SKIPPED (--noaction)\n";
-      next VOLUME;
-    }
 
     my $snapshot;
-    eval {
-      local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
-      ualarm($snapshot_timeout * 1_000_000);
-      $snapshot = $ec2->create_snapshot(
-        VolumeId    => $volume_id,
-        Description => $description,
-      );
-      ualarm(0);
-    };
-    ualarm(0);
-    if ( $@  ){
-      warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
-      return undef;
+    if ( !$Noaction ) {
+    	eval {
+    	  local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+    	  ualarm($snapshot_timeout * 1_000_000);
+    	  $snapshot = $ec2->create_snapshot(
+    	    VolumeId    => $volume_id,
+    	    Description => $description,
+    	  );
+    	  ualarm(0);
+    	};
+    	ualarm(0);
+    	if ( $@  ){
+    	  warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
+    	  return undef;
+    	}
     }
+    else {
+      my $snapshot_tag = $tags[$index] || "None.";
+      warn "snapshot SKIPPED volume_id: $volume_id; description: $description; tags: $snapshot_tag (--noaction)\n";
+      next VOLUME;
+    }  
 
     my $snapshot_id;
     if ( not defined $snapshot ) {
