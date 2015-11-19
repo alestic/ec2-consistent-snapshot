@@ -982,6 +982,18 @@ descriptions of multiple volumes snapshots. If specified multiple
 times descriptions count has to match volumes count and they will be
 applied on the same order.
 
+=item --tag "KEY=VALUE;KEY2=VALUE2"
+
+If the --tag option is given once, the provided tags will be applied to all
+created snapshots.  Tag keys and values must be separated by '='. Multiple tags
+must be separated by ';'.
+
+If the --tag option is provided more than once, the tags for each use of --tag
+will apply to each volume in the order that the volumes are provided.
+
+To check how your tags will be applied, you can use the --noaction flag before
+actually running a snapshot.
+
 =item  --freeze-filesystem MOUNTPOINT
 
 =item --xfs-filesystem MOUNTPOINT [OBSOLESCENT form of the same option]

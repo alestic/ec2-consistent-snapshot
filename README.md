@@ -64,6 +64,18 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     times descriptions count has to match volumes count and they will be
     applied on the same order.
 
+- --tag "KEY=VALUE;KEY2=VALUE2"
+
+    If the --tag option is given once, the provided tags will be applied to all
+    created snapshots.  Tag keys and values must be separated by '='. Multiple tags
+    must be separated by ';'.
+
+    If the --tag option is provided more than once, the tags for each use of --tag
+    will apply to each volume in the order that the volumes are provided.
+
+    To check how your tags will be applied, you can use the --noaction flag before
+    actually running a snapshot.
+
 - --freeze-filesystem MOUNTPOINT
 - --xfs-filesystem MOUNTPOINT \[OBSOLESCENT form of the same option\]
 
