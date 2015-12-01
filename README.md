@@ -114,6 +114,10 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     Indicates that the volume contains data files for a running MySQL
     database, which will be flushed and locked during the snapshot.
 
+    To connect, we will first look in \`--mysql-defaults-file\`, if provided.
+    Otherwise, the values of \`--mysql-host\`, \`--mysql-socket\`, \`--mysql-username\`
+    and \`--mysql-password\` will be used to build the connection string.
+
 - --mysql-defaults-file FILE
 
     MySQL defaults file, containing host, username and password, this
@@ -137,9 +141,11 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 - --mysql-stop
 
-    Indicates that the volume contains data files for a running MySQL
-    database.  The database is shutdown before the snapshot is initiated
-    and restarted afterwards. \[EXPERIMENTAL\]
+    Indicates that the volume contains data files for a running MySQL database.
+    The database is shutdown using \`/usr/bin/mysqladmin stop\` before the snapshot
+    is initiated and restarted afterwards using \`/etc/init.d/mysql start\`. Suitable
+    for running as root when a few seconds of downtime are acceptable.
+    \[EXPERIMENTAL\]
 
 - --percona
 
