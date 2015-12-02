@@ -367,7 +367,6 @@ sub _get_snapshot_tags {
      my $tag = $tags->[$index];
      my @sep_tags = split($tag_separator, $tag);
      if(scalar (@sep_tags) > 0){
-       my %snapshot_tag;
        for ( my $tag_index = 0; $tag_index < scalar (@sep_tags); ++$tag_index ) {
          my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
          $snapshot_tag{$tag_key} = $tag_value;
