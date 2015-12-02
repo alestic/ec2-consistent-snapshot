@@ -702,6 +702,11 @@ sub mysql_unlock {
 sub mysql_stop {
   $Debug and warn "$Prog: ", scalar localtime, ": MySQL stop\n";
 
+  if ( $Noaction ) {
+    warn "mysql stop SKIPPED (--noaction)\n";
+    return undef;
+  }
+
   my @args = ('/usr/bin/mysqladmin');
 
   # If an explicit defaults-file was provided, use that.
