@@ -40,7 +40,7 @@ ec2-consistent-snapshot (0.61) saucy; urgency=low
 
 ec2-consistent-snapshot (0.60) saucy; urgency=low
 
-  * Add --tags option thanks to yalamber
+  * Add --tag option thanks to yalamber
     (fixes #27 on github)
 
  -- Eric Hammond <ehammond@thinksome.com>  Thu, 12 Jun 2014 12:20:43 -0700
