@@ -117,9 +117,7 @@ my @volume_ids = @ARGV;
 
 $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 
-my $freeze_cmd = "fsfreeze";
-$freeze_cmd    = "xfs_freeze"
-    if $freeze_cmd and system("which $freeze_cmd >/dev/null") != 0;
+my $freeze_cmd = _get_fsfreeze();
 
 $mysql = 1 if $percona; # Percona is a variant of MySQL
 die "$Prog: ERROR: The --percona and --mysql-master-status-file options are mutually exclusive. ",
@@ -891,6 +889,27 @@ sub ec2_error_message {
 
     return $error;
 }
+
+# If fsfreeze is not in $PATH, try some paths which are usually excluded from the cron $PATH before
+# falling back to xfs_freeze
+sub _get_fsfreeze {
+  my $freeze_cmd = "fsfreeze";
+
+  my $freeze_not_in_path = (system("which $freeze_cmd >/dev/null") != 0);
+  if ($freeze_not_in_path) {
+    if (-x '/usr/sbin/fsfreeze')  {
+      $freeze_cmd = '/usr/sbin/fsfreeze';
+    }
+    elsif (-x '/sbin/fsfreeze') {
+      $freeze_cmd = '/sbin/fsfreeze';
+    }
+    else {
+      $freeze_cmd    = "xfs_freeze";
+    }
+  }
+  return $freeze_cmd;
+}
+
 
 
 =head1 NAME
