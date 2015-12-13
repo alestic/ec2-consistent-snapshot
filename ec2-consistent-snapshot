@@ -133,7 +133,13 @@ die "$Prog: ERROR: The --percona and --mysql-master-status-file options are mutu
 );
 die "$Prog: ERROR: Can't find AWS access key or secret access key"
   unless $use_iam_role or ($aws_access_key_id and $aws_secret_access_key);
-$Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+if ( $Debug && $use_iam_role ) {
+    warn "$Prog: Authenticating with IAM role\n";
+}
+elsif ( $Debug ) {
+    warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+}
+
 
 if ( scalar (@volume_ids) == 0 ) {
   @volume_ids = discover_volume_ids($ec2_endpoint);
@@ -300,26 +306,29 @@ sub ebs_snapshot {
     # Snapshot
     $Debug and
       warn "$Prog: ", scalar localtime, ": aws ec2 create-snapshot $volume_id\n";
-    if ( $Noaction ) {
-      warn "snapshot SKIPPED (--noaction)\n";
-      next VOLUME;
-    }
 
     my $snapshot;
-    eval {
-      local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
-      ualarm($snapshot_timeout * 1_000_000);
-      $snapshot = $ec2->create_snapshot(
-        VolumeId    => $volume_id,
-        Description => $description,
-      );
-      ualarm(0);
-    };
-    ualarm(0);
-    if ( $@  ){
-      warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
-      return undef;
+    if ( !$Noaction ) {
+    	eval {
+    	  local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+    	  ualarm($snapshot_timeout * 1_000_000);
+    	  $snapshot = $ec2->create_snapshot(
+    	    VolumeId    => $volume_id,
+    	    Description => $description,
+    	  );
+    	  ualarm(0);
+    	};
+    	ualarm(0);
+    	if ( $@  ){
+    	  warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
+    	  return undef;
+    	}
     }
+    else {
+      my $snapshot_tag = $tags[$index] || "None.";
+      warn "snapshot SKIPPED volume_id: $volume_id; description: $description; tags: $snapshot_tag (--noaction)\n";
+      next VOLUME;
+    }  
 
     my $snapshot_id;
     if ( not defined $snapshot ) {
@@ -330,20 +339,12 @@ sub ebs_snapshot {
       return undef;
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
-      if (scalar (@tags) > 0){
-        my $tag = $$tags[$index];
-        my @sep_tags = split($tag_separator, $tag);
-        if(scalar (@sep_tags) > 0){
-          my %snapshot_tag;
-          for ( my $tag_index = 0; $tag_index < scalar (@sep_tags); ++$tag_index ) {
-            my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
-            $snapshot_tag{$tag_key} = $tag_value;
-          }
-          $ec2->create_tags(
+      my $snapshot_tag = _get_snapshot_tags(\@tags,$index);
+      if (keys %$snapshot_tag){
+        $ec2->create_tags(
             ResourceId    => $snapshot_id,
-            Tags          => \%snapshot_tag,
-          );
-        }
+            Tags          => $snapshot_tag,
+        );
       }
       $Quiet or print "$snapshot_id\n";
     } else {
@@ -354,6 +355,23 @@ sub ebs_snapshot {
     }
   }
   return 1;
+}
+
+# Given array of tags and an index, parse them and return tags for a specific volumme
+sub _get_snapshot_tags {
+   my ($tags,$index) = @_;
+   my %snapshot_tag;	
+   if (scalar @$tags > 0){
+     my $tag = $tags->[$index];
+     my @sep_tags = split($tag_separator, $tag);
+     if(scalar (@sep_tags) > 0){
+       for ( my $tag_index = 0; $tag_index < scalar (@sep_tags); ++$tag_index ) {
+         my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
+         $snapshot_tag{$tag_key} = $tag_value;
+       }
+     }
+   }
+   return \%snapshot_tag;	
 }
 
 sub get {
@@ -981,6 +999,18 @@ You may specify this option multiple times if you need to customize
 descriptions of multiple volumes snapshots. If specified multiple
 times descriptions count has to match volumes count and they will be
 applied on the same order.
+
+=item --tag "KEY=VALUE;KEY2=VALUE2"
+
+If the --tag option is given once, the provided tags will be applied to all
+created snapshots.  Tag keys and values must be separated by '='. Multiple tags
+must be separated by ';'.
+
+If the --tag option is provided more than once, the tags for each use of --tag
+will apply to each volume in the order that the volumes are provided.
+
+To check how your tags will be applied, you can use the --noaction flag before
+actually running a snapshot.
 
 =item  --freeze-filesystem MOUNTPOINT
 
