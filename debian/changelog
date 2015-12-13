@@ -3,8 +3,12 @@ ec2-consistent-snapshot (0.67) vivid; urgency=medium
   * Try harder to find fsfreeze.
     thanks to Mark Stosberg
     (fixes #71 on github)
+  * Clean up --tag code and docs.
+    Show IAM role in --debug
+    thanks to Mark Stosberg
+    (fixes #65 on github)
 
- -- Eric Hammond <ehammond@thinksome.com>  Sat, 12 Dec 2015 19:57:40 -0800
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 12 Dec 2015 19:58:34 -0800
 
 ec2-consistent-snapshot (0.66) vivid; urgency=medium
 
