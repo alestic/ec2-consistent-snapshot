@@ -4,7 +4,8 @@ ec2-consistent-snapshot (0.67) vivid; urgency=medium
     thanks to Mark Stosberg
     (fixes #71 on github)
   * Clean up --tag code and docs.
-    Show IAM role in --debug
+    Show IAM role in --debug.
+    Show more info about SKIPPED snapshots.
     thanks to Mark Stosberg
     (fixes #65 on github)
 
