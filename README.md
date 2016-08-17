@@ -317,29 +317,6 @@ commands:
     sudo apt-get update
     sudo apt-get install ec2-consistent-snapshot
 
-This program may also require the installation of the Net::Amazon::EC2
-Perl package from CPAN.  On Ubuntu 10.04 Lucid and higher, this should
-happen automatically by the dependency on the libnet-amazon-ec2-perl
-package.
-
-On some earlier releases of Ubuntu you can install the required
-package with the following command:
-
-    sudo PERL_MM_USE_DEFAULT=1 cpan Net::Amazon::EC2
-
-On Ubuntu 8.04 Hardy, use the following commands instead:
-
-    code=$(lsb_release -cs)
-    echo "deb http://ppa.launchpad.net/alestic/ppa/ubuntu $code main"|
-      sudo tee /etc/apt/sources.list.d/alestic-ppa.list
-    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys BE09C571
-    sudo apt-get update
-    sudo apt-get install ec2-consistent-snapshot build-essential
-    sudo cpan Net::Amazon::EC2
-
-The default values can be accepted for most of the prompts, though it
-is necessary to select a CPAN mirror on Hardy.
-
 <a name="iam-roles"></a>
 
 # IAM ROLES
