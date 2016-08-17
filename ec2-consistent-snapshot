@@ -477,8 +477,41 @@ sub discover_volume_ids {
     # symlink at /sys/dev/block/MAJOR:MINOR
     my $slaves = IO::Dir->new("/sys/dev/block/$device/slaves");
     my @devices = ();
-    push @devices, grep { !/^\./ } $slaves->read() if defined($slaves);
-    push @devices, basename readlink("/sys/dev/block/$device") unless scalar(@devices);
+    my @initial_slaves = $slaves->read() if defined $slaves;
+
+    # Handle LVM Thin volumes
+    if ( defined($slaves) && grep { $_ =~ /^dm-/ } @initial_slaves ) {
+      warn "$Prog: ", scalar localtime, ": Seems to be an LVM Thin Volume\n";
+      # If there is a slave directory in a slave directory, this could be an LVM thin volume and we need to go deeper to find the actual block device
+      foreach my $first_slave (@initial_slaves) {
+        next if $first_slave =~ /^\./;
+        my $second_slaves = IO::Dir->new("/sys/dev/block/$device/slaves/$first_slave/slaves");
+
+        if ( defined($second_slaves->read())) {
+          foreach my $second_slave ($second_slaves->read()) {
+            next if $second_slave =~ /^\./;
+            my $lvm_thin_slaves = IO::Dir->new("/sys/dev/block/$device/slaves/$first_slave/slaves/$second_slave/slaves");
+
+            if ( defined($lvm_thin_slaves->read())) {
+              foreach my $device (grep { !/^\./ } $lvm_thin_slaves->read()) {
+                # Skip duplicate dm devices
+                push @devices, $device unless grep {$_ eq $device} @devices;
+              }
+            }
+          }
+        }
+      }
+    }
+    # Handle Standard LVM and RAID/MD
+    elsif ( defined($slaves) && grep { $_ =~ /^xvd[a-f]/ } @initial_slaves) {
+      warn "$Prog: ", scalar localtime, ": Seems to be an LVM or RAID/MD Volume\n";
+      push @devices, grep { !/^\./ } @initial_slaves;
+    }
+    # Handle regular block devices
+    else {
+      warn "$Prog: ", scalar localtime, ": Seems to be a regular block device\n";
+      push @devices, basename readlink("/sys/dev/block/$device") unless scalar(@devices);
+    }
 
     if ( scalar(@devices) == 0 ) {
       warn "$Prog: ERROR: Unable to determine devices for mount $fs\n";
@@ -486,10 +519,17 @@ sub discover_volume_ids {
     }
 
     for my $device (@devices) {
-      my $ec2_device = "/dev/$device";
-      $ec2_device =~ s/\bxvd/sd/;
+      my ($ec2_device, $ec2_device_2, $ec2_device_3, $volume_id);
+      $ec2_device = $ec2_device_2 = $ec2_device_3 = "/dev/$device";
 
-      my $volume_id = $ebs_volume_ids{$ec2_device};
+      $ec2_device =~ s/\bxvd/sd/;
+      $ec2_device_2 =~ s/\bxvd([a-z])\d?/sd$1/;
+      $ec2_device_3 =~ s/\bxvd([a-z]\d)/sd$1/;
+
+      # Root devices are usually /dev/sda1 however secondary partition can be formatted as the first partition or the whole device
+      $volume_id = $ebs_volume_ids{$ec2_device} if defined $ebs_volume_ids{$ec2_device};
+      $volume_id = $ebs_volume_ids{$ec2_device_2} if defined $ebs_volume_ids{$ec2_device_2};
+      $volume_id = $ebs_volume_ids{$ec2_device_3} if defined $ebs_volume_ids{$ec2_device_3};
 
       unless ( defined $volume_id ) {
         warn "$Prog: ERROR: Unable to determine volume id for device $device in mount $fs\n";
