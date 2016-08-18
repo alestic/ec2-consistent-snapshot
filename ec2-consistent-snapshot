@@ -481,7 +481,7 @@ sub discover_volume_ids {
 
     # Handle LVM Thin volumes
     if ( defined($slaves) && grep { $_ =~ /^dm-/ } @initial_slaves ) {
-      warn "$Prog: ", scalar localtime, ": Seems to be an LVM Thin Volume\n";
+      warn "$Prog: ", scalar localtime, ": Seems to be an LVM Thin Volume\n" if $Debug;
       # If there is a slave directory in a slave directory, this could be an LVM thin volume and we need to go deeper to find the actual block device
       foreach my $first_slave (@initial_slaves) {
         next if $first_slave =~ /^\./;
@@ -504,12 +504,12 @@ sub discover_volume_ids {
     }
     # Handle Standard LVM and RAID/MD
     elsif ( defined($slaves) && grep { $_ =~ /^xvd[a-f]/ } @initial_slaves) {
-      warn "$Prog: ", scalar localtime, ": Seems to be an LVM or RAID/MD Volume\n";
+      warn "$Prog: ", scalar localtime, ": Seems to be an LVM or RAID/MD Volume\n" if $Debug;
       push @devices, grep { !/^\./ } @initial_slaves;
     }
     # Handle regular block devices
     else {
-      warn "$Prog: ", scalar localtime, ": Seems to be a regular block device\n";
+      warn "$Prog: ", scalar localtime, ": Seems to be a regular block device\n" if $Debug;
       push @devices, basename readlink("/sys/dev/block/$device") unless scalar(@devices);
     }
 
