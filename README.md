@@ -108,18 +108,46 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     database, which will be flushed and locked during the snapshot.
 
 - --mongo-host HOST
+
+    Define host used with the \`--mongo\` option.
+
+    Defaults to 'localhost'.
+
 - --mongo-port PORT
+
+    Define MongoDB port used with the \`--mongo\` option.
+
+    Defaults to 27017
+
 - --mongo-username USER
+
+    Define MongoDB username used with the \`--mongo\` option.
+
+    Defaults to \`undef\`. Required only if authentication is required.
+
 - --mongo-password PASS
 
-    Mongo host, port, username, and password used to flush logs if there
-    is authentication required on the admin database.
+    Define MongoDB password used with the \`--mongo\` option.
+
+    Defaults to \`undef\`.  Required only if authentication is required.
 
 - --mongo-stop
 
     Indicates that the volume contains data files for a running Mongo
     instance.  The instance is shutdown before the snapshot is initiated
     and restarted afterwards. \[EXPERIMENTAL\]
+
+    Uses the \`--mongo-init\` option to stop and start the database ignores
+    all other Mongo-related options
+
+- --mongo-init
+
+    The command used to stop and start mongo.
+
+    Defaults to \`/etc/init.d/mongod\`.
+
+    Used only if \`--mongo-stop\` is used. The \`--mongo-init\` command is passed the 'stop' and 'start'
+    options during to the stop/start process.
 
 - --mysql
 
@@ -317,6 +345,29 @@ commands:
     sudo apt-get update
     sudo apt-get install ec2-consistent-snapshot
 
+This program may also require the installation of the Net::Amazon::EC2
+Perl package from CPAN.  On Ubuntu 10.04 Lucid and higher, this should
+happen automatically by the dependency on the libnet-amazon-ec2-perl
+package.
+
+On some earlier releases of Ubuntu you can install the required
+package with the following command:
+
+    sudo PERL_MM_USE_DEFAULT=1 cpan Net::Amazon::EC2
+
+On Ubuntu 8.04 Hardy, use the following commands instead:
+
+    code=$(lsb_release -cs)
+    echo "deb http://ppa.launchpad.net/alestic/ppa/ubuntu $code main"|
+      sudo tee /etc/apt/sources.list.d/alestic-ppa.list
+    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys BE09C571
+    sudo apt-get update
+    sudo apt-get install ec2-consistent-snapshot build-essential
+    sudo cpan Net::Amazon::EC2
+
+The default values can be accepted for most of the prompts, though it
+is necessary to select a CPAN mirror on Hardy.
+
 <a name="iam-roles"></a>
 
 # IAM ROLES
@@ -439,11 +490,11 @@ providing feature development, feedback, bug reports, and patches:
 
 # AUTHOR/MAINTAINER
 
-Eric Hammond <ehammond@thinksome.com>
+Eric Hammond &lt;ehammond@thinksome.com>
 
 # LICENSE
 
-Copyright 2009-2015 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2015 Eric Hammond &lt;ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
