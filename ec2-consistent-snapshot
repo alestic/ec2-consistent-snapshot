@@ -1046,20 +1046,45 @@ database, which will be flushed and locked during the snapshot.
 
 =item --mongo-host HOST
 
+Define host used with the `--mongo` option.
+
+Defaults to 'localhost'.
+
 =item --mongo-port PORT
+
+Define MongoDB port used with the `--mongo` option.
+
+Defaults to 27017
 
 =item --mongo-username USER
 
+Define MongoDB username used with the `--mongo` option.
+
+Defaults to `undef`. Required only if authentication is required.
+
 =item --mongo-password PASS
 
-Mongo host, port, username, and password used to flush logs if there
-is authentication required on the admin database.
+Define MongoDB password used with the `--mongo` option.
+
+Defaults to `undef`.  Required only if authentication is required.
 
 =item --mongo-stop
 
 Indicates that the volume contains data files for a running Mongo
 instance.  The instance is shutdown before the snapshot is initiated
 and restarted afterwards. [EXPERIMENTAL]
+
+Uses the `--mongo-init` option to stop and start the database ignores
+all other Mongo-related options
+
+=item --mongo-init
+
+The command used to stop and start mongo.
+
+Defaults to `/etc/init.d/mongod`.
+
+Used only if `--mongo-stop` is used. The `--mongo-init` command is passed the 'stop' and 'start'
+options during to the stop/start process.
 
 =item --mysql
 
