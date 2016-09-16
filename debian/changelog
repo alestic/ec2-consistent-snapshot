@@ -2,6 +2,8 @@ ec2-consistent-snapshot (0.68) UNRELEASED; urgency=medium
 
   * Quit supporting EOL'ed releases of Ubuntu
     thanks to Mark Stosberg
+  * Expanded MongoDB documentation
+    thanks to Mark Stosberg
 
  -- Eric Hammond <ehammond@thinksome.com>  Thu, 18 Aug 2016 10:06:29 -0700
 
