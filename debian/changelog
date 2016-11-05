@@ -1,3 +1,11 @@
+ec2-consistent-snapshot (0.69) wily; urgency=medium
+
+  * Add --mongo-timeout option
+    thanks to Ayush Goyal
+    (fixes #16 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 05 Nov 2016 12:33:29 -0700
+
 ec2-consistent-snapshot (0.68) wily; urgency=medium
 
   * Quit supporting EOL'ed releases of Ubuntu

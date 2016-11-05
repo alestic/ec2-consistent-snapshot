@@ -490,11 +490,11 @@ providing feature development, feedback, bug reports, and patches:
 
 # AUTHOR/MAINTAINER
 
-Eric Hammond &lt;ehammond@thinksome.com>
+Eric Hammond <ehammond@thinksome.com>
 
 # LICENSE
 
-Copyright 2009-2015 Eric Hammond &lt;ehammond@thinksome.com>
+Copyright 2009-2015 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
