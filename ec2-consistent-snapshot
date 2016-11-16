@@ -194,8 +194,10 @@ END {
     $Debug and warn "$Prog: ", scalar localtime,
       ": removing master info file: $mysql_master_status_file\n";
     if ( not $Noaction ) {
-      unlink $mysql_master_status_file
-        or die "$Prog: Couldn't remove file: $mysql_master_status_file: $!\n";
+      if ( -e $mysql_master_status_file ) {
+        unlink $mysql_master_status_file
+          or die "$Prog: Couldn't remove file: $mysql_master_status_file: $!\n";
+      }
     }
   }
 
