@@ -48,6 +48,7 @@ my $mongo_port                 = 27017;
 my $mongo_stop                 = 0;
 my $mongo_timeout              = 30000;
 my $mysql                      = 0;
+my $mysql_stop_slave           = 0;
 #my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
 my $mysql_defaults_file        = undef;
 my $mysql_socket               = undef;
@@ -94,6 +95,7 @@ GetOptions(
   'mongo-stop'                   => \$mongo_stop,
   'mongo-timeout=i'              => \$mongo_timeout,
   'mysql'                        => \$mysql,
+  'mysql-stop-slave'             => \$mysql_stop_slave,
   'mysql-defaults-file=s'        => \$mysql_defaults_file,
   'mysql-socket=s'               => \$mysql_socket,
   'mysql-master-status-file=s'   => \$mysql_master_status_file,
@@ -311,20 +313,23 @@ sub ebs_snapshot {
 
     my $snapshot;
     if ( !$Noaction ) {
-    	eval {
-    	  local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
-    	  ualarm($snapshot_timeout * 1_000_000);
-    	  $snapshot = $ec2->create_snapshot(
-    	    VolumeId    => $volume_id,
-    	    Description => $description,
-    	  );
-    	  ualarm(0);
-    	};
-    	ualarm(0);
-    	if ( $@  ){
-    	  warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
-    	  return undef;
-    	}
+       eval {
+          eval {
+            local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+            ualarm($snapshot_timeout * 1_000_000);
+            $snapshot = $ec2->create_snapshot(
+              VolumeId    => $volume_id,
+              Description => $description,
+            );
+         };
+         ualarm(0);
+         die $@ if $@;
+       };
+       ualarm(0);
+       if ( $@  ){
+         warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
+         return undef;
+       }
     }
     else {
       my $snapshot_tag = $tags[$index] || "None.";
@@ -625,6 +630,12 @@ sub mysql_connect {
   return $mysql_dbh;
 }
 
+sub mysql_is_slave {
+  my ($mysql_dbh) = @_;
+  my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
+  return $slave_status->{Slave_SQL_Running} eq 'Yes';
+}
+
 sub mysql_lock {
   my ($mysql_dbh) = @_;
 
@@ -645,6 +656,16 @@ sub mysql_lock {
     $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
     return # do not store/print binlog info as can be erroneous
 
+  } else if ( $mysql_stop_slave ) {
+    # STOP SLAVE blocks until the current replication group is done processing
+    # so we only really need to run it once with a high timeout
+    sql_timeout_retry(
+      q{ STOP SLAVE },
+      "MySQL Stop Replication",
+      $lock_timeout * $lock_tries,
+      1,
+      0,
+    ) unless $Noaction;
   } else {
     # Try a flush first without locking so the later flush with lock
     # goes faster.  This may not be needed as it seems to interfere with
@@ -668,22 +689,28 @@ sub mysql_lock {
   }
 
   my ($mysql_logfile, $mysql_position,
-      $mysql_binlog_do_db, $mysql_binlog_ignore_db);
+      $mysql_binlog_do_db, $mysql_binlog_ignore_db,
+      $mysql_master_hostname, $mysql_master_private_hostname);
   if ( not $Noaction ) {
     # This might be a slave database already
     my $slave_status = $mysql_dbh->selectrow_hashref(q{ SHOW SLAVE STATUS });
-    $mysql_logfile           = $slave_status->{Slave_IO_State}
-                             ? $slave_status->{Master_Log_File}
-                             : undef;
-    $mysql_position          = $slave_status->{Read_Master_Log_Pos};
+    $mysql_master_hostname   = $slave_status->{Master_Host};
+    $mysql_master_private_hostname = $slave_status->{Master_Host};
+    $mysql_logfile           = $slave_status->{Relay_Master_Log_File};
+    $mysql_position          = $slave_status->{Exec_Master_Log_Pos};
     $mysql_binlog_do_db      = $slave_status->{Replicate_Do_DB};
     $mysql_binlog_ignore_db  = $slave_status->{Replicate_Ignore_DB};
 
     # or this might be the master
-    ($mysql_logfile, $mysql_position,
-     $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
-      $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  })
-      unless $mysql_logfile;
+    if ( not mysql_is_slave($mysql_dbh) ) {
+      ($mysql_logfile, $mysql_position,
+       $mysql_binlog_do_db, $mysql_binlog_ignore_db) =
+       $mysql_dbh->selectrow_array(q{  SHOW MASTER STATUS  });
+      # Get the public hostname from an ec2 api endpoint.
+      # See: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AESDG-chapter-instancedata.html
+      $mysql_master_hostname = `curl http://169.254.169.254/latest/meta-data/public-hostname`;
+      $mysql_master_private_hostname = `curl http://169.254.169.254/latest/meta-data/hostname`;
+    }
   }
 
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
@@ -699,6 +726,8 @@ sub mysql_lock {
       open(MYSQLMASTERSTATUS,"> $mysql_master_status_file") or
         die "$Prog: Unable to open for write: $mysql_master_status_file: $!\n";
       print MYSQLMASTERSTATUS <<"EOM";
+master_hostname="$mysql_master_hostname"
+master_private_hostname="$mysql_master_private_hostname"
 master_log_file="$mysql_logfile"
 master_log_pos="$mysql_position"
 master_binlog_do_db="$mysql_binlog_do_db"
@@ -713,7 +742,11 @@ sub mysql_unlock {
   my ($mysql_dbh) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": MySQL unlock\n";
-  $mysql_dbh->do(q{ UNLOCK TABLES }) unless $Noaction;
+  if ( $mysql_stop_slave ) {
+     $mysql_dbh->do(q{ START SLAVE }) unless $Noaction;
+  } else {
+     $mysql_dbh->do(q{ UNLOCK TABLES }) unless $Noaction;
+  }
 
 }
 
@@ -754,11 +787,13 @@ sub sql_timeout_retry {
   while ( $lock_tries -- ) {
     $Debug and warn "$Prog: ", scalar localtime, ": $description\n";
     eval {
-      ualarm($lock_timeout * 1_000_000);
-      $mysql_dbh->do($sql) unless $Noaction;
-      ualarm(0);
+       eval {
+         ualarm($lock_timeout * 1_000_000);
+         $mysql_dbh->do($sql) unless $Noaction;
+       };
+       ualarm(0);
+       die $@ if $@; 
     };
-    ualarm(0);
     last LOCK unless $@ =~ /timeout/;
 
     if ( $mysql_kill_query ) {
@@ -1097,6 +1132,13 @@ To connect, we will first look in `--mysql-defaults-file`, if provided.
 Otherwise, the values of `--mysql-host`, `--mysql-socket`, `--mysql-username`
 and `--mysql-password` will be used to build the connection string.
 
+=item --mysql-stop-slave
+
+Indicates that "STOP SLAVE" should be used instead of "FLUSH TABLES
+WITH READ LOCK" which can inadvertently lock up mysql, See :
+http://www.mysqlperformanceblog.com/2012/03/23/how-flush-tables-with-read-lock-works-with-innodb-tables/
+Note: This should only be used on mysql replication slaves as this
+doesn't prevent writes by other users during the backup.
 
 =item --mysql-defaults-file FILE
 
