@@ -720,7 +720,26 @@ sub mysql_unlock {
 sub mysql_stop {
   $Debug and warn "$Prog: ", scalar localtime, ": MySQL stop\n";
 
-  my $result = system('/usr/bin/mysqladmin', 'shutdown');
+  if ( $Noaction ) {
+    warn "mysql stop SKIPPED (--noaction)\n";
+    return undef;
+  }
+
+  my @args = ('/usr/bin/mysqladmin');
+
+  # If an explicit defaults-file was provided, use that.
+  if ($mysql_defaults_file) {
+    push @args,  "--defaults-file=$mysql_defaults_file";
+  }
+  # Otherwise, Debian and Ubuntu use this file to hold credentials that can be used for maintenance.
+  # If you can read the file, usually as root, it should work.
+  elsif (-r '/etc/mysql/debian.cnf') {
+    push @args, "--defaults-file=/etc/mysql/debian.cnf";
+  }
+
+  push @args, 'shutdown';
+
+  my $result = system(@args);
 
   if ( $result != 0 ) {
     die "$Prog: Unable to stop mysqld: $? $!";
@@ -1127,8 +1146,9 @@ with --mysql-stop
 Indicates that the volume contains data files for a running MySQL database.
 The database is shutdown using `/usr/bin/mysqladmin stop` before the snapshot
 is initiated and restarted afterwards using `/etc/init.d/mysql start`. Suitable
-for running as root when a few seconds of downtime are acceptable.
-[EXPERIMENTAL]
+for running as root when a few seconds of downtime are acceptable. Authentication
+is done using `--mysql-defaults-file`, which defaults to `/etc/mysql/debian.cnf`,
+which handles shutdowns as root on Debian and Ubuntu.  [EXPERIMENTAL]
 
 =item --percona
 

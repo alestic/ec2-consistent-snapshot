@@ -184,8 +184,9 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     Indicates that the volume contains data files for a running MySQL database.
     The database is shutdown using \`/usr/bin/mysqladmin stop\` before the snapshot
     is initiated and restarted afterwards using \`/etc/init.d/mysql start\`. Suitable
-    for running as root when a few seconds of downtime are acceptable.
-    \[EXPERIMENTAL\]
+    for running as root when a few seconds of downtime are acceptable. Authentication
+    is done using \`--mysql-defaults-file\`, which defaults to \`/etc/mysql/debian.cnf\`,
+    which handles shutdowns as root on Debian and Ubuntu.  \[EXPERIMENTAL\]
 
 - --percona
 
