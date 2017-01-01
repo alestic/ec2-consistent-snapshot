@@ -512,6 +512,7 @@ sub mongo_connect {
   my ($mongo_host, $mongo_port, $mongo_username, $mongo_password, $mongo_timeout) = @_;
 
   require MongoDB;
+  require MongoDB::Code;
   MongoDB->import;
   require MongoDB::Database;
   MongoDB::Database->import;
