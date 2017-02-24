@@ -656,7 +656,7 @@ sub mysql_lock {
     $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
     return # do not store/print binlog info as can be erroneous
 
-  } else if ( $mysql_stop_slave ) {
+  } elsif ( $mysql_stop_slave ) {
     # STOP SLAVE blocks until the current replication group is done processing
     # so we only really need to run it once with a high timeout
     sql_timeout_retry(
