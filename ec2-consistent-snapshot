@@ -124,9 +124,6 @@ $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 my $freeze_cmd = _get_fsfreeze();
 
 $mysql = 1 if $percona; # Percona is a variant of MySQL
-die "$Prog: ERROR: The --percona and --mysql-master-status-file options are mutually exclusive. ",
-                  "Percona locking does not give accurate binlog location."
-  if $percona and defined($mysql_master_status_file);
 
 #---- MAIN ----
 
@@ -654,10 +651,6 @@ sub mysql_lock {
       $lock_tries,
       $lock_sleep,
     );
-
-    $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
-    return # do not store/print binlog info as can be erroneous
-
   } elsif ( $mysql_stop_slave ) {
     # STOP SLAVE blocks until the current replication group is done processing
     # so we only really need to run it once with a high timeout
