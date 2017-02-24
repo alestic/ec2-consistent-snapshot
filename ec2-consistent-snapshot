@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #
 # Copyright (C) 2009-2014 Eric Hammond <ehammond@thinksome.com>
 #
@@ -7,8 +7,11 @@ use warnings;
 (our $Prog) = ($0 =~ m%([^/]+)$%);
 use Getopt::Long;
 use Pod::Usage;
+use File::Basename qw(basename);
 use File::Slurp;
+use IO::Dir;
 use IO::Socket::SSL;
+use LWP::UserAgent qw();
 eval 'use Mozilla::CA';
 use Time::HiRes qw(ualarm usleep);
 use Net::Amazon::EC2 0.11;
@@ -30,17 +33,20 @@ my $aws_secret_access_key_file = $ENV{AWS_SECRET_ACCESS_KEY};
 my $aws_credentials_file       = $ENV{AWS_CREDENTIALS};
 my $use_iam_role               = 0;
 my $region                     = undef;
+my $signature_version          = undef;
 my $ec2_endpoint               = undef;
 my @descriptions               = ();
 my @tags                       = ();
 my $tag_separator              = ";";
 my @freeze_filesystem          = ();
+my @no_freeze_filesystem       = ();
 my $mongo                      = 0;
 my $mongo_username             = undef;
 my $mongo_password             = undef;
 my $mongo_host                 = undef;
 my $mongo_port                 = 27017;
 my $mongo_stop                 = 0;
+my $mongo_timeout              = 30000;
 my $mysql                      = 0;
 my $mysql_stop_slave           = 0;
 #my $mysql_defaults_file        = "$ENV{HOME}/.my.cnf";
@@ -51,6 +57,7 @@ my $mysql_username             = undef;
 my $mysql_password             = undef;
 my $mysql_host                 = undef;
 my $mysql_stop                 = 0;
+my $percona                    = 0;
 my $snapshot_timeout           = 10.0; # seconds
 my $lock_timeout               =  0.5; # seconds
 my $lock_tries                 = 60;
@@ -73,17 +80,20 @@ GetOptions(
   'aws-credentials-file=s'       => \$aws_credentials_file,
   'use-iam-role'                 => \$use_iam_role,
   'region=s'                     => \$region,
+  'signature-version=s'          => \$signature_version,
   'ec2-endpoint=s'               => \$ec2_endpoint,
   'description=s'                => \@descriptions,
   'tag=s'                        => \@tags,
   'xfs-filesystem=s'             => \@freeze_filesystem,
   'freeze-filesystem=s'          => \@freeze_filesystem,
+  'no-freeze-filesystem=s'       => \@no_freeze_filesystem,
   'mongo'                        => \$mongo,
   'mongo-username=s'             => \$mongo_username,
   'mongo-password=s'             => \$mongo_password,
   'mongo-host=s'                 => \$mongo_host,
   'mongo-port=s'                 => \$mongo_port,
   'mongo-stop'                   => \$mongo_stop,
+  'mongo-timeout=i'              => \$mongo_timeout,
   'mysql'                        => \$mysql,
   'mysql-stop-slave'             => \$mysql_stop_slave,
   'mysql-defaults-file=s'        => \$mysql_defaults_file,
@@ -93,6 +103,7 @@ GetOptions(
   'mysql-password=s'             => \$mysql_password,
   'mysql-host=s'                 => \$mysql_host,
   'mysql-stop'                   => \$mysql_stop,
+  'percona'                      => \$percona,
   'snapshot-timeout=s'           => \$snapshot_timeout,
   'lock-timeout=s'               => \$lock_timeout,
   'lock-tries=s'                 => \$lock_tries,
@@ -107,13 +118,15 @@ my $filesystem_frozen = 0;
 pod2usage(1) if $Help;
 
 my @volume_ids = @ARGV;
-pod2usage(2) unless scalar @volume_ids;
 
 $ec2_endpoint ||= "https://ec2.$region.amazonaws.com" if $region;
 
-my $freeze_cmd = "fsfreeze";
-$freeze_cmd    = "xfs_freeze"
-    if $freeze_cmd and system("which $freeze_cmd >/dev/null") != 0;
+my $freeze_cmd = _get_fsfreeze();
+
+$mysql = 1 if $percona; # Percona is a variant of MySQL
+die "$Prog: ERROR: The --percona and --mysql-master-status-file options are mutually exclusive. ",
+                  "Percona locking does not give accurate binlog location."
+  if $percona and defined($mysql_master_status_file);
 
 #---- MAIN ----
 
@@ -124,7 +137,18 @@ $freeze_cmd    = "xfs_freeze"
 );
 die "$Prog: ERROR: Can't find AWS access key or secret access key"
   unless $use_iam_role or ($aws_access_key_id and $aws_secret_access_key);
-$Debug and warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+if ( $Debug && $use_iam_role ) {
+    warn "$Prog: Authenticating with IAM role\n";
+}
+elsif ( $Debug ) {
+    warn "$Prog: Using AWS access key: $aws_access_key_id\n";
+}
+
+
+if ( scalar (@volume_ids) == 0 ) {
+  @volume_ids = discover_volume_ids($ec2_endpoint);
+}
+pod2usage(2) unless scalar @volume_ids;
 
 die "$Prog: ERROR: Descriptions count (", scalar (@descriptions),
     ") does not match volumes count (", scalar (@volume_ids), ")"
@@ -165,7 +189,7 @@ my $mongo_dbh = undef;
 if ( $mongo_stop ) {
   $mongo_stopped = mongo_stop();
 } elsif ( $mongo ) {
-  $mongo_dbh = mongo_connect($mongo_host, $mongo_port, $mongo_username, $mongo_password);
+  $mongo_dbh = mongo_connect($mongo_host, $mongo_port, $mongo_username, $mongo_password, $mongo_timeout);
   mongo_lock($mongo_dbh);
 }
 
@@ -250,19 +274,28 @@ END {
 
 #---- METHODS ----
 
-sub ebs_snapshot {
-  my ($volume_ids, $ec2_endpoint, $descriptions, $tags) = @_;
+sub ec2_connection {
+  my ($ec2_endpoint) = @_;
 
   $Debug and warn "$Prog: ", scalar localtime, ": create EC2 object\n";
   $Debug and warn "$Prog: Endpoint: $ec2_endpoint\n" if $ec2_endpoint;
 
   # EC2 API object
-  my $ec2 = Net::Amazon::EC2->new(
+  return Net::Amazon::EC2->new(
     ((! $use_iam_role) ? (AWSAccessKeyId  => $aws_access_key_id,) : () ),
     ((! $use_iam_role) ? (SecretAccessKey => $aws_secret_access_key) : () ),
     ($ec2_endpoint ? (base_url => $ec2_endpoint) : ()),
+    ($region ? (region => $region) : ()),
+    ($signature_version ? (signature_version => $signature_version) : ()),
     # ($Debug ? (debug => 1) : ()),
   );
+}
+
+sub ebs_snapshot {
+  my ($volume_ids, $ec2_endpoint, $descriptions, $tags) = @_;
+
+  # EC2 API object
+  my $ec2 = ec2_connection($ec2_endpoint);
 
   if ( not $ec2 ) {
     warn "$Prog: ERROR: Unable to create EC2 connection";
@@ -278,30 +311,33 @@ sub ebs_snapshot {
 
     # Snapshot
     $Debug and
-      warn "$Prog: ", scalar localtime, ": ec2-create-snapshot $volume_id\n";
-    if ( $Noaction ) {
-      warn "snapshot SKIPPED (--noaction)\n";
-      next VOLUME;
-    }
+      warn "$Prog: ", scalar localtime, ": aws ec2 create-snapshot $volume_id\n";
 
     my $snapshot;
-    eval {
+    if ( !$Noaction ) {
        eval {
-         local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
-         ualarm($snapshot_timeout * 1_000_000);
-         $snapshot = $ec2->create_snapshot(
-           VolumeId    => $volume_id,
-           Description => $description,
-         );
-      };
-      ualarm(0);
-      die $@ if $@;
-    };
-    ualarm(0);
-    if ( $@  ){
-      warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
-      return undef;
+          eval {
+            local $SIG{ALRM} = sub { ualarm(0); die "timeout\n" };
+            ualarm($snapshot_timeout * 1_000_000);
+            $snapshot = $ec2->create_snapshot(
+              VolumeId    => $volume_id,
+              Description => $description,
+            );
+         };
+         ualarm(0);
+         die $@ if $@;
+       };
+       ualarm(0);
+       if ( $@  ){
+         warn "$Prog: ERROR: create_snapshot: ", ec2_error_message($@);
+         return undef;
+       }
     }
+    else {
+      my $snapshot_tag = $tags[$index] || "None.";
+      warn "snapshot SKIPPED volume_id: $volume_id; description: $description; tags: $snapshot_tag (--noaction)\n";
+      next VOLUME;
+    }  
 
     my $snapshot_id;
     if ( not defined $snapshot ) {
@@ -312,20 +348,12 @@ sub ebs_snapshot {
       return undef;
     } elsif ( $snapshot->can('snapshot_id') ) {
       $snapshot_id = $snapshot->snapshot_id;
-      if (scalar (@tags) > 0){
-        my $tag = $$tags[$index];
-        my @sep_tags = split($tag_separator, $tag);
-        if(scalar (@sep_tags) > 0){
-          my %snapshot_tag;
-          for ( my $tag_index = 0; $tag_index < scalar (@sep_tags); ++$tag_index ) {
-            my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
-            $snapshot_tag{$tag_key} = $tag_value;
-          }
-          $ec2->create_tags(
+      my $snapshot_tag = _get_snapshot_tags(\@tags,$index);
+      if (keys %$snapshot_tag){
+        $ec2->create_tags(
             ResourceId    => $snapshot_id,
-            Tags          => \%snapshot_tag,
-          );
-        }
+            Tags          => $snapshot_tag,
+        );
       }
       $Quiet or print "$snapshot_id\n";
     } else {
@@ -338,25 +366,169 @@ sub ebs_snapshot {
   return 1;
 }
 
+# Given array of tags and an index, parse them and return tags for a specific volumme
+sub _get_snapshot_tags {
+   my ($tags,$index) = @_;
+   my %snapshot_tag;	
+   if (scalar @$tags > 0){
+     my $tag = $tags->[$index];
+     my @sep_tags = split($tag_separator, $tag);
+     if(scalar (@sep_tags) > 0){
+       for ( my $tag_index = 0; $tag_index < scalar (@sep_tags); ++$tag_index ) {
+         my ($tag_key, $tag_value) = split('=', $sep_tags[$tag_index], 2);
+         $snapshot_tag{$tag_key} = $tag_value;
+       }
+     }
+   }
+   return \%snapshot_tag;	
+}
+
+sub get {
+  my ($url) = @_;
+
+  my $ua = LWP::UserAgent->new;
+  $ua->timeout(2);
+
+  my $response = $ua->get($url);
+
+  my $content;
+  if ($response->is_success) {
+    $content = $response->decoded_content;
+  } else {
+    $Debug and warn "$Prog: ", scalar localtime,
+                    ": Unable to fetch $url: @{[$response->status_line]}\n";
+  }
+
+  return $content;
+}
+
+sub ec2_instance_description {
+  my ($ec2_endpoint) = @_;
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": Determining instance id\n";
+
+  my $instance_id = get('http://169.254.169.254/latest/meta-data/instance-id');
+  unless ( defined $instance_id ) {
+    warn "$Prog: ERROR: Unable to determine instance id\n";
+    return undef;
+  }
+
+  my $ec2 = ec2_connection($ec2_endpoint);
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": Fetching instance description for $instance_id\n";
+  my $reservations = $ec2->describe_instances(InstanceId => $instance_id);
+  unless ( defined($reservations) && scalar(@$reservations) == 1 ) {
+    warn "$Prog: ERROR: Unable to find reservation for $instance_id\n";
+    return undef;
+  }
+
+  return $reservations->[0]->instances_set->[0];
+}
+
+sub discover_volume_ids {
+  my ($ec2_endpoint) = @_;
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": No volume ids specified; discovering volume ids\n";
+
+  my @filesystems = (@freeze_filesystem, @no_freeze_filesystem);
+
+  if ( scalar(@filesystems) == 0 ) {
+    $Debug and warn "$Prog: ", scalar localtime,
+                    ": No filesystems specified; unable to discover volume ids\n";
+    return ();
+  }
+
+  $Debug and warn "$Prog: ", scalar localtime,
+                  ": Discovering volume ids for: @filesystems\n";
+
+  my $ec2_instance = ec2_instance_description($ec2_endpoint);
+  return () unless $ec2_instance;
+
+  # RunningInstances->block_device_mapping is a Maybe[ArrayRef]
+  unless ( $ec2_instance->block_device_mapping ) {
+    warn "$Prog: ERROR: Unable to find block device mappings for ", $ec2_instance->instance_id, "\n";
+    return ();
+  }
+
+  my %ebs_volume_ids = ();
+  for my $bd ( @{$ec2_instance->block_device_mapping} ) {
+    # BlockDeviceMapping->ebs is a Maybe[ArrayRef]
+    $ebs_volume_ids{$bd->device_name} = $bd->ebs->volume_id if $bd->ebs;
+  }
+
+  unless ( %ebs_volume_ids ) {
+    warn "$Prog: ERROR: Unable to find EBS block devices for ", $ec2_instance->instance_id, "\n";
+    return ();
+  }
+
+  if ( $Debug ) {
+    warn "$Prog: ", scalar localtime,
+         ": Found EBS block devices for ", $ec2_instance->instance_id, ": \n";
+    for my $dev (sort keys %ebs_volume_ids) {
+      warn "$Prog: ", scalar localtime, ":     ", $ebs_volume_ids{$dev}, " ", $dev, "\n";
+    }
+  }
+
+  my $volume_ids;
+  for my $fs (@filesystems) {
+    my $device = qx(mountpoint -dq "$fs");
+    chomp $device;
+    unless ($? == 0 && $device) {
+      warn "$Prog: ERROR: $fs is not a mount point\n";
+      return ();
+    }
+
+    # Check sysfs for a /slaves directory; if we find one, assume we have a
+    # compound device (e.g. LVM or Raid), otherwise, get the basename of the
+    # symlink at /sys/dev/block/MAJOR:MINOR
+    my $slaves = IO::Dir->new("/sys/dev/block/$device/slaves");
+    my @devices = ();
+    push @devices, grep { !/^\./ } $slaves->read() if defined($slaves);
+    push @devices, basename readlink("/sys/dev/block/$device") unless scalar(@devices);
+
+    if ( scalar(@devices) == 0 ) {
+      warn "$Prog: ERROR: Unable to determine devices for mount $fs\n";
+      return ();
+    }
+
+    for my $device (@devices) {
+      my $ec2_device = "/dev/$device";
+      $ec2_device =~ s/\bxvd/sd/;
+
+      my $volume_id = $ebs_volume_ids{$ec2_device};
+
+      unless ( defined $volume_id ) {
+        warn "$Prog: ERROR: Unable to determine volume id for device $device in mount $fs\n";
+        return ();
+      }
+
+      push @$volume_ids, $volume_id;
+    }
+  }
+
+  return @$volume_ids;
+}
+
 #
 # Mongo
 #
 sub mongo_connect {
-  my ($mongo_host, $mongo_port, $mongo_username, $mongo_password) = @_;
+  my ($mongo_host, $mongo_port, $mongo_username, $mongo_password, $mongo_timeout) = @_;
 
   require MongoDB;
   MongoDB->import;
   require MongoDB::Database;
   MongoDB::Database->import;
-  require MongoDB::Admin;
-  MongoDB::Admin->import;
 
   $mongo_host ||= 'localhost';
 
   $Debug and warn "$Prog: ", scalar localtime,
                   ": mongo connect on ${mongo_host}:${mongo_port}\n";
 
-  my $mongo_conn = MongoDB::Connection->new(host => "${mongo_host}:${mongo_port}")
+  my $mongo_conn = MongoDB::MongoClient->new(host => "${mongo_host}:${mongo_port}", query_timeout => $mongo_timeout)
     or die "$Prog: ERROR: Unable to connect to mongo"
          . " on $mongo_host";
 
@@ -366,11 +538,7 @@ sub mongo_connect {
            . " on $mongo_host as $mongo_username";
   }
 
-  my $mongo_dbh = MongoDB::Admin->new(connection => $mongo_conn)
-    or die "$Prog: ERROR: Unable to get Mongo admin connection"
-           . " on $mongo_host";
-
-  return $mongo_dbh;
+  return $mongo_conn;
 }
 
 sub mongo_lock {
@@ -382,7 +550,7 @@ sub mongo_lock {
   if ( $Noaction ) {
     warn "mongo lock SKIPPED (--noaction)\n";
   }
-  $mongo_dbh->fsync_lock();
+  $mongo_dbh->fsync({lock => 1});
 
   $Debug and warn "$Prog: ", scalar localtime, ": mongo locked\n";
 
@@ -398,7 +566,7 @@ sub mongo_unlock {
   if ( $Noaction ) {
     warn "mongo unlock SKIPPED (--noaction)\n";
   }
-  $mongo_dbh->unlock();
+  $mongo_dbh->fsync_unlock();
 
   $Debug and warn "$Prog: ", scalar localtime, ": mongo unlocked\n";
 
@@ -477,7 +645,20 @@ sub mysql_lock {
   # as this can interfere with long-running queries on the slaves.
   $mysql_dbh->do(q{ SET SQL_LOG_BIN=0 }) unless $Noaction;
 
-  if ( $mysql_stop_slave ) {
+  if ( $percona ) {
+    # http://www.percona.com/blog/2014/03/11/introducing-backup-locks-percona-server-2/
+    sql_timeout_retry(
+      q{ LOCK TABLES FOR BACKUP },
+      "Percona table lock",
+      $lock_timeout,
+      $lock_tries,
+      $lock_sleep,
+    );
+
+    $mysql_dbh->do(q{ SET SQL_LOG_BIN=1 }) unless $Noaction;
+    return # do not store/print binlog info as can be erroneous
+
+  } elsif ( $mysql_stop_slave ) {
     # STOP SLAVE blocks until the current replication group is done processing
     # so we only really need to run it once with a high timeout
     sql_timeout_retry(
@@ -557,8 +738,6 @@ EOM
       close(MYSQLMASTERSTATUS);
     }
   }
-
-  return ($mysql_logfile, $mysql_position);
 }
 
 sub mysql_unlock {
@@ -768,6 +947,27 @@ sub ec2_error_message {
     return $error;
 }
 
+# If fsfreeze is not in $PATH, try some paths which are usually excluded from the cron $PATH before
+# falling back to xfs_freeze
+sub _get_fsfreeze {
+  my $freeze_cmd = "fsfreeze";
+
+  my $freeze_not_in_path = (system("which $freeze_cmd >/dev/null") != 0);
+  if ($freeze_not_in_path) {
+    if (-x '/usr/sbin/fsfreeze')  {
+      $freeze_cmd = '/usr/sbin/fsfreeze';
+    }
+    elsif (-x '/sbin/fsfreeze') {
+      $freeze_cmd = '/sbin/fsfreeze';
+    }
+    else {
+      $freeze_cmd    = "xfs_freeze";
+    }
+  }
+  return $freeze_cmd;
+}
+
+
 
 =head1 NAME
 
@@ -821,7 +1021,8 @@ $AWS_CREDENTIALS environment variable or the value $HOME/.awssecret
 =item  --use-iam-role
 
 The instance is part of an IAM role that that has permission to create
-snapshots so there is no need to specify access key or secret.
+snapshots so there is no need to specify access key or secret. See L</IAM ROLES>
+section for an example Managed Policy with the required permissions.
 
 =item --region REGION
 
@@ -838,6 +1039,18 @@ descriptions of multiple volumes snapshots. If specified multiple
 times descriptions count has to match volumes count and they will be
 applied on the same order.
 
+=item --tag "KEY=VALUE;KEY2=VALUE2"
+
+If the --tag option is given once, the provided tags will be applied to all
+created snapshots.  Tag keys and values must be separated by '='. Multiple tags
+must be separated by ';'.
+
+If the --tag option is provided more than once, the tags for each use of --tag
+will apply to each volume in the order that the volumes are provided.
+
+To check how your tags will be applied, you can use the --noaction flag before
+actually running a snapshot.
+
 =item  --freeze-filesystem MOUNTPOINT
 
 =item --xfs-filesystem MOUNTPOINT [OBSOLESCENT form of the same option]
@@ -852,6 +1065,19 @@ fsfreeze comes with newer versions of util-linux.
 You may specify this option multiple times if you need to freeze multiple
 filesystems on the the EBS volume(s).
 
+If no EBS volume ids are specified as command arguments, the specified
+mountpoints will be used along with mount points passed to
+--no-freeze-filesystem to determine the volume ids.
+
+=item --no-freeze-filesystem MOUNTPOINT
+
+Indicates that the filesystem at the specified mount point should be used for
+volume id discovery if no volume ids are specified as arguments, but that it
+should not be frozen.
+
+You may specify this options multiple times if you need to discover EBS volumes
+for multiple filesystems.
+
 =item --mongo
 
 Indicates that the volume contains data files for a running Mongo
@@ -859,14 +1085,27 @@ database, which will be flushed and locked during the snapshot.
 
 =item --mongo-host HOST
 
+Define host used with the `--mongo` option.
+
+Defaults to 'localhost'.
+
 =item --mongo-port PORT
+
+Define MongoDB port used with the `--mongo` option.
+
+Defaults to 27017
 
 =item --mongo-username USER
 
+Define MongoDB username used with the `--mongo` option.
+
+Defaults to `undef`. Required only if authentication is required.
+
 =item --mongo-password PASS
 
-Mongo host, port, username, and password used to flush logs if there
-is authentication required on the admin database.
+Define MongoDB password used with the `--mongo` option.
+
+Defaults to `undef`.  Required only if authentication is required.
 
 =item --mongo-stop
 
@@ -874,10 +1113,26 @@ Indicates that the volume contains data files for a running Mongo
 instance.  The instance is shutdown before the snapshot is initiated
 and restarted afterwards. [EXPERIMENTAL]
 
+Uses the `--mongo-init` option to stop and start the database ignores
+all other Mongo-related options
+
+=item --mongo-init
+
+The command used to stop and start mongo.
+
+Defaults to `/etc/init.d/mongod`.
+
+Used only if `--mongo-stop` is used. The `--mongo-init` command is passed the 'stop' and 'start'
+options during to the stop/start process.
+
 =item --mysql
 
 Indicates that the volume contains data files for a running MySQL
 database, which will be flushed and locked during the snapshot.
+
+To connect, we will first look in `--mysql-defaults-file`, if provided.
+Otherwise, the values of `--mysql-host`, `--mysql-socket`, `--mysql-username`
+and `--mysql-password` will be used to build the connection string.
 
 =item --mysql-stop-slave
 
@@ -913,9 +1168,17 @@ with --mysql-stop
 
 =item --mysql-stop
 
-Indicates that the volume contains data files for a running MySQL
-database.  The database is shutdown before the snapshot is initiated
-and restarted afterwards. [EXPERIMENTAL]
+Indicates that the volume contains data files for a running MySQL database.
+The database is shutdown using `/usr/bin/mysqladmin stop` before the snapshot
+is initiated and restarted afterwards using `/etc/init.d/mysql start`. Suitable
+for running as root when a few seconds of downtime are acceptable.
+[EXPERIMENTAL]
+
+=item --percona
+
+Indicates that the volume contains data files for a running Percona/MySQL
+database, which will be locked using Percona's unique backup locking commands.
+Note: this sets '--mysql' automatically.
 
 =item --snapshot-timeout SECONDS
 
@@ -1030,6 +1293,11 @@ Snapshot two volumes with customized descriptions:
    --description "Description 2nd Volume"                     \
    vol-VOL1 vol-VOL2
 
+Snapshot a volume without specifying a volume id (requires ec2:DescribeInstances
+permission):
+
+ ec2-consistent-snapshot --freeze-filesystem /vol
+
 =head1 ENVIRONMENT
 
 =over
@@ -1101,6 +1369,59 @@ On Ubuntu 8.04 Hardy, use the following commands instead:
 The default values can be accepted for most of the prompts, though it
 is necessary to select a CPAN mirror on Hardy.
 
+=for markdown <a name="iam-roles"></a>
+
+=head1 IAM ROLES
+
+When authenticating using a IAM Role your role must have the appropriate
+permissions.  You can create a single IAM Managed Policy that allows the
+necessary permissions and attach the managed policy to each IAM role you would
+like to allow to create EC2 snapshots.
+
+The following policy allows both creating the snapshots as the read-only
+C<DescribeInstances> permission which is required if you want to snapshot a volume
+without specifying the volume ID.
+
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "1",
+                "Effect": "Allow",
+                "Action": [
+                    "ec2:CreateSnapshot",
+                    "ec2:CreateTags",
+                    "ec2:DescribeInstances"
+                ],
+                "Resource": [
+                    "*"
+                ]
+            }
+        ]
+    }
+
+If you get an "unauthorized" error when using the C<--use-iam-role> option, you
+can use the C<--debug> option to confirm whether it was the
+C<DescribeInstances> or C<CreateSnapshot> API call that failed.
+
+You might also use IAM policies to allow automating deleting old snapshots
+through another tool. Using a separate policy is recommended for that. By
+putting the "delete" permission in the same policy, you would be allowing
+someone with access to one of your EC2 instances to delete the backups of the
+instance volumes. Instead, carefully restrict the delete permission.
+
+=head1 VOLUME DISCOVERY
+
+If no EBS volume ids are passed as arguments to ec2-consistent-snapshot, it
+will attempt to discover the volume ids based on the mount points passed to
+--no-freeze-filesystem and --freeze-filesystem.
+
+In order to determine the volume ids, ec2-consistent-snapshot first makes a
+call to the EC2 instance metadata service to determine the instance's id. Next,
+it makes a call to the DescribeInstances EC2 api to get the list of volumes
+attached to the instance. It then compares the device names for each attachment
+with a list of device names determined using mountpoint(1) and sysfs.
+
 =head1 SEE ALSO
 
 =over
@@ -1109,7 +1430,7 @@ is necessary to select a CPAN mirror on Hardy.
 
 =item Amazon EC2 EBS (Elastic Block Store)
 
-=item ec2-create-snapshot
+=item L<aws ec2 create-snapshot|http://docs.aws.amazon.com/cli/latest/reference/ec2/create-snapshot.html>
 
 =back
 
@@ -1168,6 +1489,11 @@ providing feature development, feedback, bug reports, and patches:
   yalamber
   Daniel Beardsley
   dileep-p
+  theonlypippo
+  Tobias Lindgren
+  nbfowler
+  Mark Stosberg
+  Tim McEwan
 
 =head1 AUTHOR/MAINTAINER
 
@@ -1175,7 +1501,7 @@ Eric Hammond <ehammond@thinksome.com>
 
 =head1 LICENSE
 
-Copyright 2009-2014 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2015 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

@@ -8,52 +8,53 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
 
 # OPTIONS
 
-- \-h --help
+- -h --help
 
     Print help and exit.
 
-- \-d --debug
+- -d --debug
 
     Debug mode.
 
-- \-q --quiet
+- -q --quiet
 
     Quiet mode.
 
-- \-n --noaction
+- -n --noaction
 
     Dry run. Just say what you would have done, don't do it.
 
-- \--aws-access-key-id KEY
-- \--aws-secret-access-key SECRET
+- --aws-access-key-id KEY
+- --aws-secret-access-key SECRET
 
     Amazon AWS access key and secret access key.  Defaults to
     environment variables or .awssecret file contents described below.
 
-- \--aws-access-key-id-file KEYFILE
-- \--aws-secret-access-key-file SECRETFILE
+- --aws-access-key-id-file KEYFILE
+- --aws-secret-access-key-file SECRETFILE
 
     Files containing Amazon AWS access key and secret access key.
     Defaults to environment variables or .awssecret file contents
     described below.
 
-- \--aws-credentials-file CREDENTIALSFILE
+- --aws-credentials-file CREDENTIALSFILE
 
     File containing both the Amazon AWS access key and secret access
     key on seprate lines and in that order.  Defaults to contents of
     $AWS\_CREDENTIALS environment variable or the value $HOME/.awssecret
 
-- \--use-iam-role
+- --use-iam-role
 
     The instance is part of an IAM role that that has permission to create
-    snapshots so there is no need to specify access key or secret.
+    snapshots so there is no need to specify access key or secret. See ["IAM ROLES"](#iam-roles)
+    section for an example Managed Policy with the required permissions.
 
-- \--region REGION
+- --region REGION
 
     Specify a different EC2 region like "eu-west-1".  Defaults to
     "us-east-1".
 
-- \--description DESCRIPTION
+- --description DESCRIPTION
 
     Specify a description string for the EBS snapshot.  Defaults to the
     name of the program.
@@ -63,8 +64,20 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     times descriptions count has to match volumes count and they will be
     applied on the same order.
 
-- \--freeze-filesystem MOUNTPOINT
-- \--xfs-filesystem MOUNTPOINT \[OBSOLESCENT form of the same option\]
+- --tag "KEY=VALUE;KEY2=VALUE2"
+
+    If the --tag option is given once, the provided tags will be applied to all
+    created snapshots.  Tag keys and values must be separated by '='. Multiple tags
+    must be separated by ';'.
+
+    If the --tag option is provided more than once, the tags for each use of --tag
+    will apply to each volume in the order that the volumes are provided.
+
+    To check how your tags will be applied, you can use the --noaction flag before
+    actually running a snapshot.
+
+- --freeze-filesystem MOUNTPOINT
+- --xfs-filesystem MOUNTPOINT \[OBSOLESCENT form of the same option\]
 
     Indicates that the filesystem at the specified mount point should be
     flushed and frozen during the snapshot. Requires the xfs\_freeze or
@@ -76,84 +89,137 @@ ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
     You may specify this option multiple times if you need to freeze multiple
     filesystems on the the EBS volume(s).
 
-- \--mongo
+    If no EBS volume ids are specified as command arguments, the specified
+    mountpoints will be used along with mount points passed to
+    \--no-freeze-filesystem to determine the volume ids.
+
+- --no-freeze-filesystem MOUNTPOINT
+
+    Indicates that the filesystem at the specified mount point should be used for
+    volume id discovery if no volume ids are specified as arguments, but that it
+    should not be frozen.
+
+    You may specify this options multiple times if you need to discover EBS volumes
+    for multiple filesystems.
+
+- --mongo
 
     Indicates that the volume contains data files for a running Mongo
     database, which will be flushed and locked during the snapshot.
 
-- \--mongo-host HOST
-- \--mongo-port PORT
-- \--mongo-username USER
-- \--mongo-password PASS
+- --mongo-host HOST
 
-    Mongo host, port, username, and password used to flush logs if there
-    is authentication required on the admin database.
+    Define host used with the \`--mongo\` option.
 
-- \--mongo-stop
+    Defaults to 'localhost'.
+
+- --mongo-port PORT
+
+    Define MongoDB port used with the \`--mongo\` option.
+
+    Defaults to 27017
+
+- --mongo-username USER
+
+    Define MongoDB username used with the \`--mongo\` option.
+
+    Defaults to \`undef\`. Required only if authentication is required.
+
+- --mongo-password PASS
+
+    Define MongoDB password used with the \`--mongo\` option.
+
+    Defaults to \`undef\`.  Required only if authentication is required.
+
+- --mongo-stop
 
     Indicates that the volume contains data files for a running Mongo
     instance.  The instance is shutdown before the snapshot is initiated
     and restarted afterwards. \[EXPERIMENTAL\]
 
-- \--mysql
+    Uses the \`--mongo-init\` option to stop and start the database ignores
+    all other Mongo-related options
+
+- --mongo-init
+
+    The command used to stop and start mongo.
+
+    Defaults to \`/etc/init.d/mongod\`.
+
+    Used only if \`--mongo-stop\` is used. The \`--mongo-init\` command is passed the 'stop' and 'start'
+    options during to the stop/start process.
+
+- --mysql
 
     Indicates that the volume contains data files for a running MySQL
     database, which will be flushed and locked during the snapshot.
 
-- \--mysql-defaults-file FILE
+    To connect, we will first look in \`--mysql-defaults-file\`, if provided.
+    Otherwise, the values of \`--mysql-host\`, \`--mysql-socket\`, \`--mysql-username\`
+    and \`--mysql-password\` will be used to build the connection string.
+
+- --mysql-defaults-file FILE
 
     MySQL defaults file, containing host, username and password, this
     option will ignore the --mysql-host, --mysql-username,
     \--mysql-password parameters
 
-- \--mysql-host HOST
-- \--mysql-socket PATH
-- \--mysql-username USER
-- \--mysql-password PASS
+- --mysql-host HOST
+- --mysql-socket PATH
+- --mysql-username USER
+- --mysql-password PASS
 
     MySQL host, socket path, username, and password used to flush logs and
     lock tables.  User must have appropriate permissions.  Defaults to
     $HOME/.my.cnf file contents.
 
-- \--mysql-master-status-file FILE
+- --mysql-master-status-file FILE
 
     Store the MASTER STATUS output in a file on the snapshot. It will be
     removed after the EBS snapshot is taken.  This option will be ignored
     with --mysql-stop
 
-- \--mysql-stop
+- --mysql-stop
 
-    Indicates that the volume contains data files for a running MySQL
-    database.  The database is shutdown before the snapshot is initiated
-    and restarted afterwards. \[EXPERIMENTAL\]
+    Indicates that the volume contains data files for a running MySQL database.
+    The database is shutdown using \`/usr/bin/mysqladmin stop\` before the snapshot
+    is initiated and restarted afterwards using \`/etc/init.d/mysql start\`. Suitable
+    for running as root when a few seconds of downtime are acceptable.
+    \[EXPERIMENTAL\]
 
-- \--snapshot-timeout SECONDS
+- --percona
+
+    Indicates that the volume contains data files for a running Percona/MySQL
+    database, which will be locked using Percona's unique backup locking commands.
+    Note: this sets '--mysql' automatically.
+
+- --snapshot-timeout SECONDS
 
     How many seconds to wait for the snapshot-create to return.  Defaults
     to 10.0
 
-- \--lock-timeout SECONDS
+- --lock-timeout SECONDS
 
     How many seconds to wait for a database lock. Defaults to 0.5.
     Making this too large can force other processes to wait while this
     process waits for a lock.  Better to make it small and try lots of
     times.
 
-- \--lock-tries COUNT
+- --lock-tries COUNT
 
     How many times to try to get a database lock before failing.  Defaults
     to 60.
 
-- \--lock-sleep SECONDS
+- --lock-sleep SECONDS
 
     How many seconds to sleep between database lock tries.  Defaults
     to 5.0.
 
-- \--pre-freeze-command COMMAND
+- --pre-freeze-command COMMAND
 
     Command to run after MySQL stop/lock and before filesystem freeze.
 
-- \--post-thaw-command COMMAND
+- --post-thaw-command COMMAND
 
     Command to run immediately after filesystem unfreeze and before MySQL
     start/unlock.
@@ -234,6 +300,11 @@ Snapshot two volumes with customized descriptions:
       --description "Description 2nd Volume"                     \
       vol-VOL1 vol-VOL2
 
+Snapshot a volume without specifying a volume id (requires ec2:DescribeInstances
+permission):
+
+    ec2-consistent-snapshot --freeze-filesystem /vol
+
 # ENVIRONMENT
 
 - $AWS\_ACCESS\_KEY\_ID
@@ -266,7 +337,7 @@ Snapshot two volumes with customized descriptions:
 
 # INSTALLATION
 
-On most Ubuntu releases, the __ec2-consistent-snapshot__ package can be
+On most Ubuntu releases, the **ec2-consistent-snapshot** package can be
 installed directly from the Alestic.com PPA using the following
 commands:
 
@@ -297,15 +368,64 @@ On Ubuntu 8.04 Hardy, use the following commands instead:
 The default values can be accepted for most of the prompts, though it
 is necessary to select a CPAN mirror on Hardy.
 
-On Amazon Linux, Use the following command. 
+<a name="iam-roles"></a>
 
-     yum --enablerepo=epel install perl-Net-Amazon-EC2 perl-File-Slurp perl-DBI perl-DBD-MySQL perl-Net-SSLeay perl-IO-Socket-SSL perl-Time-HiRes perl-Params-Validate perl-DateTime-Format-ISO8601 perl-Date-Manip perl-Moose ca-certificates
+# IAM ROLES
+
+When authenticating using a IAM Role your role must have the appropriate
+permissions.  You can create a single IAM Managed Policy that allows the
+necessary permissions and attach the managed policy to each IAM role you would
+like to allow to create EC2 snapshots.
+
+The following policy allows both creating the snapshots as the read-only
+`DescribeInstances` permission which is required if you want to snapshot a volume
+without specifying the volume ID.
+
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "1",
+                "Effect": "Allow",
+                "Action": [
+                    "ec2:CreateSnapshot",
+                    "ec2:CreateTags",
+                    "ec2:DescribeInstances"
+                ],
+                "Resource": [
+                    "*"
+                ]
+            }
+        ]
+    }
+
+If you get an "unauthorized" error when using the `--use-iam-role` option, you
+can use the `--debug` option to confirm whether it was the
+`DescribeInstances` or `CreateSnapshot` API call that failed.
+
+You might also use IAM policies to allow automating deleting old snapshots
+through another tool. Using a separate policy is recommended for that. By
+putting the "delete" permission in the same policy, you would be allowing
+someone with access to one of your EC2 instances to delete the backups of the
+instance volumes. Instead, carefully restrict the delete permission.
+
+# VOLUME DISCOVERY
+
+If no EBS volume ids are passed as arguments to ec2-consistent-snapshot, it
+will attempt to discover the volume ids based on the mount points passed to
+\--no-freeze-filesystem and --freeze-filesystem.
+
+In order to determine the volume ids, ec2-consistent-snapshot first makes a
+call to the EC2 instance metadata service to determine the instance's id. Next,
+it makes a call to the DescribeInstances EC2 api to get the list of volumes
+attached to the instance. It then compares the device names for each attachment
+with a list of device names determined using mountpoint(1) and sysfs.
 
 # SEE ALSO
 
 - Amazon EC2
 - Amazon EC2 EBS (Elastic Block Store)
-- ec2-create-snapshot
+- [aws ec2 create-snapshot](http://docs.aws.amazon.com/cli/latest/reference/ec2/create-snapshot.html)
 
 # CAVEATS
 
@@ -361,6 +481,12 @@ providing feature development, feedback, bug reports, and patches:
     Peter Waller
     yalamber
     Daniel Beardsley
+    dileep-p
+    theonlypippo
+    Tobias Lindgren
+    nbfowler
+    Mark Stosberg
+    Tim McEwan
 
 # AUTHOR/MAINTAINER
 
@@ -368,7 +494,7 @@ Eric Hammond <ehammond@thinksome.com>
 
 # LICENSE
 
-Copyright 2009-2014 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2015 Eric Hammond <ehammond@thinksome.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

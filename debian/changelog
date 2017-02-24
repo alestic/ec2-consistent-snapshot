@@ -1,3 +1,76 @@
+ec2-consistent-snapshot (0.69) wily; urgency=medium
+
+  * Add --mongo-timeout option
+    thanks to Ayush Goyal
+    (fixes #16 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 05 Nov 2016 12:33:29 -0700
+
+ec2-consistent-snapshot (0.68) wily; urgency=medium
+
+  * Quit supporting EOL'ed releases of Ubuntu
+    thanks to Mark Stosberg
+  * Expanded MongoDB documentation
+    thanks to Mark Stosberg
+  * Add MongoDB library dependency
+    thanks to Mark Stosberg
+
+ -- Eric Hammond <ehammond@thinksome.com>  Fri, 16 Sep 2016 14:11:01 -0700
+
+ec2-consistent-snapshot (0.67) vivid; urgency=medium
+
+  * Try harder to find fsfreeze.
+    thanks to Mark Stosberg
+    (fixes #71 on github)
+  * Clean up --tag code and docs.
+    Show IAM role in --debug.
+    Show more info about SKIPPED snapshots.
+    thanks to Mark Stosberg
+    (fixes #65 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 12 Dec 2015 19:58:34 -0800
+
+ec2-consistent-snapshot (0.66) vivid; urgency=medium
+
+  * Better document --mysql related options.
+    thanks to Mark Stosberg
+    (fixes #67 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 12 Dec 2015 19:44:23 -0800
+
+ec2-consistent-snapshot (0.65) vivid; urgency=medium
+
+  * Add CreateTags to sample policy
+    thanks to Mark Stosberg
+    (fixes #69 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Sat, 12 Dec 2015 19:30:45 -0800
+
+ec2-consistent-snapshot (0.64) vivid; urgency=medium
+
+  * Add --signature-version option
+    thanks to Tobias Lindgren
+    (fixes #59 on github)
+  * Replace MongoDB::Connection and Admin with MongoClient
+    thanks to nbfowler
+    (pull request #62 on github)
+  * Reference aws-cli instead of old command
+    thanks to Mark Stosberg
+    (pull request #58 on github)
+  * Add --percona option for for FLUSH LOCAL TABLES issues
+    thanks to Tim McEwan
+    (pull request #50)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Mon, 26 Oct 2015 19:55:12 -0700
+
+ec2-consistent-snapshot (0.63) trusty; urgency=medium
+
+  * Update shabang line to use env perl.
+    thanks to theonlypippo
+    (fixes #55 on github)
+
+ -- Eric Hammond <ehammond@thinksome.com>  Fri, 05 Jun 2015 15:35:35 -0700
+
 ec2-consistent-snapshot (0.62) saucy; urgency=low
 
   * Improve cleanup on database query timeouts and interrupts
@@ -15,7 +88,7 @@ ec2-consistent-snapshot (0.61) saucy; urgency=low
 
 ec2-consistent-snapshot (0.60) saucy; urgency=low
 
-  * Add --tags option thanks to yalamber
+  * Add --tag option thanks to yalamber
     (fixes #27 on github)
 
  -- Eric Hammond <ehammond@thinksome.com>  Thu, 12 Jun 2014 12:20:43 -0700
