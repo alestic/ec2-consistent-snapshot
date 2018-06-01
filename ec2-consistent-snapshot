@@ -521,17 +521,27 @@ sub discover_volume_ids {
     }
 
     for my $device (@devices) {
-      my ($ec2_device, $ec2_device_2, $ec2_device_3, $volume_id);
-      $ec2_device = $ec2_device_2 = $ec2_device_3 = "/dev/$device";
+      my ($ec2_device, $ec2_device_2, $ec2_device_3, $ec2_device_4, $volume_id);
+      $ec2_device = $ec2_device_2 = $ec2_device_3 = $ec2_device_4 = "/dev/$device";
 
       $ec2_device =~ s/\bxvd/sd/;
       $ec2_device_2 =~ s/\bxvd([a-z])\d?/sd$1/;
       $ec2_device_3 =~ s/\bxvd([a-z]\d)/sd$1/;
 
+      # Need to handle NVME devices, which require some digging to get the EBS "device name"
+      if ( $ec2_device_4 =~ m/nvme[0-9]n[0-9]p?[0-9]?/ ) {
+        # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/nvme-ebs-volumes.html
+        my $nvme_output = `nvme id-ctrl -v $ec2_device_4`;
+        ( my $nvme_device_name ) = $nvme_output =~ m/0000:\s[0-9a-fA-F\s]+\s"(sd[a-z][0-9]?)\./;
+        $ec2_device_4 = '/dev/' . $nvme_device_name;
+        warn "$Prog: ", scalar localtime, ": Found NVME block device $ec2_device_4\n" if $Debug;
+      }
+
       # Root devices are usually /dev/sda1 however secondary partition can be formatted as the first partition or the whole device
       $volume_id = $ebs_volume_ids{$ec2_device} if defined $ebs_volume_ids{$ec2_device};
       $volume_id = $ebs_volume_ids{$ec2_device_2} if defined $ebs_volume_ids{$ec2_device_2};
       $volume_id = $ebs_volume_ids{$ec2_device_3} if defined $ebs_volume_ids{$ec2_device_3};
+      $volume_id = $ebs_volume_ids{$ec2_device_4} if defined $ebs_volume_ids{$ec2_device_4};
 
       unless ( defined $volume_id ) {
         warn "$Prog: ERROR: Unable to determine volume id for device $device in mount $fs\n";
