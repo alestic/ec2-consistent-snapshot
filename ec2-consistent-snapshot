@@ -532,9 +532,22 @@ sub discover_volume_ids {
       if ( $ec2_device_4 =~ m/nvme[0-9]n[0-9]p?[0-9]?/ ) {
         # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/nvme-ebs-volumes.html
         my $nvme_output = `nvme id-ctrl -v $ec2_device_4`;
-        ( my $nvme_device_name ) = $nvme_output =~ m/0000:\s[0-9a-fA-F\s]+\s"(sd[a-z][0-9]?)\./;
-        $ec2_device_4 = '/dev/' . $nvme_device_name;
-        warn "$Prog: ", scalar localtime, ": Found NVME block device $ec2_device_4\n" if $Debug;
+        if ($? == -1) {
+          die "$Prog: 'nvme' command invocation failed with error '$!', you may need to install the 'nvme-cli' package";
+        }
+
+        if ( $nvme_output =~ m/0000:\s[0-9a-fA-F\s]+\s"(sd[a-z][0-9]?)\./ ) {
+          $ec2_device_4 = '/dev/' . $1;
+          warn "$Prog: ", scalar localtime, ": Found NVME block device $ec2_device_4\n" if $Debug;
+        }
+        # nvme-cli can somtimes return a prefix of '/dev/' in front of the device name..
+        elsif ( $nvme_output =~ m/0000:\s[0-9a-fA-F\s]+\s"(\/dev\/sd[a-z][0-9]?)\./ ) {
+          $ec2_device_4 = $1;
+          warn "$Prog: ", scalar localtime, ": Found NVME block device $ec2_device_4\n" if $Debug;
+        }
+        else {
+          warn "$Prog: ", scalar localtime, ": Block device looks like NVME but i couldn't determine volume name\n" if $Debug;
+        }
       }
 
       # Root devices are usually /dev/sda1 however secondary partition can be formatted as the first partition or the whole device
