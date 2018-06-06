@@ -1,0 +1,39 @@
+name: ec2-consistent-snapshot # you probably want to 'snapcraft register <name>'
+version: '0.70' # just for humans, typically '1.2+git' or '1.3.2'
+summary: Initiate consistent EBS snapshots in Amazon EC2 # 79 char long summary
+description: |
+ Initiate EBS (elastic block volume) snapshots in Amazon EC2.  In particular,
+ it can take steps like flushing and locking a MySQL or MongoDB
+ database and flushing and freezing an XFS file system during the
+ snapshot.
+grade: devel # must be 'stable' to release into candidate/stable channels
+confinement: devmode # use 'strict' once you have the right plugs and slots
+
+apps:
+  ec2-consistent-snapshot:
+    command: ec2-consistent-snapshot
+    environment:
+      LC_ALL: "C.UTF-8"
+      PERL5LIB:  "$SNAP/usr/lib/x86_64-linux-gnu/perl-base/:$SNAP/usr/lib/x86_64-linux-gnu/perl5/5.26/:$SNAP/usr/share/perl5/:$SNAP/usr/share/perl/5.26.1/:$SNAP/usr/lib/x86_64-linux-gnu/perl/5.26/:$SNAP/usr/lib/x86_64-linux-gnu/perl/5.26.1/"
+
+parts:
+  ec2-consistent-snapshot:
+    plugin: dump
+    stage-packages:
+      - xfsprogs
+      - perl-base
+      - perl-modules
+      - libnet-amazon-ec2-perl
+      - libfile-slurp-perl
+      - libwww-perl
+      - libdigest-hmac-perl
+      - libparams-validate-perl
+      - libxml-simple-perl
+      - libmoose-perl
+      - libcrypt-ssleay-perl
+      - libdatetime-locale-perl
+      - libdatetime-timezone-perl
+      - libdbd-mysql-perl
+      - libio-socket-ssl-perl
+      - libmongodb-perl
+
