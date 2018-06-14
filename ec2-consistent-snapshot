@@ -521,17 +521,18 @@ sub discover_volume_ids {
     }
 
     for my $device (@devices) {
-      my ($ec2_device, $ec2_device_2, $ec2_device_3, $volume_id);
-      $ec2_device = $ec2_device_2 = $ec2_device_3 = "/dev/$device";
+      my ($ec2_device, $ec2_device_2, $ec2_device_3, $ec2_device_4, $volume_id);
+      $ec2_device = $ec2_device_2 = $ec2_device_3 = $ec2_device_4 = "/dev/$device";
 
-      $ec2_device =~ s/\bxvd/sd/;
-      $ec2_device_2 =~ s/\bxvd([a-z])\d?/sd$1/;
-      $ec2_device_3 =~ s/\bxvd([a-z]\d)/sd$1/;
+      $ec2_device_2 =~ s/\bxvd/sd/;
+      $ec2_device_3 =~ s/\bxvd([a-z])\d?/sd$1/;
+      $ec2_device_4 =~ s/\bxvd([a-z]\d)/sd$1/;
 
       # Root devices are usually /dev/sda1 however secondary partition can be formatted as the first partition or the whole device
       $volume_id = $ebs_volume_ids{$ec2_device} if defined $ebs_volume_ids{$ec2_device};
       $volume_id = $ebs_volume_ids{$ec2_device_2} if defined $ebs_volume_ids{$ec2_device_2};
       $volume_id = $ebs_volume_ids{$ec2_device_3} if defined $ebs_volume_ids{$ec2_device_3};
+      $volume_id = $ebs_volume_ids{$ec2_device_4} if defined $ebs_volume_ids{$ec2_device_4};
 
       unless ( defined $volume_id ) {
         warn "$Prog: ERROR: Unable to determine volume id for device $device in mount $fs\n";
