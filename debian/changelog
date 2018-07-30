@@ -1,3 +1,9 @@
+ec2-consistent-snapshot (0.71) bionic; urgency=low
+
+  * Fix snap packaging issue for Bionic. (Thanks to @sidprak)
+
+ -- Mark Stosberg <mark@rideamigos.com>  Tues, 19 Dec 2017 16:24:00 -0500
+
 ec2-consistent-snapshot (0.70) xenial; urgency=medium
 
   * Bump dependency Net::Amazon::EC2 to 0.33.
