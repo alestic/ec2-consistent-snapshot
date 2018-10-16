@@ -505,7 +505,7 @@ sub discover_volume_ids {
       }
     }
     # Handle Standard LVM and RAID/MD
-    elsif ( defined($slaves) && grep { $_ =~ /^xvd[a-f]/ } @initial_slaves) {
+    elsif ( defined($slaves) && grep { $_ =~ /^xvd[a-f]|^nvme[0-9]n[0-9]p?[0-9]?/ } @initial_slaves) {
       warn "$Prog: ", scalar localtime, ": Seems to be an LVM or RAID/MD Volume\n" if $Debug;
       push @devices, grep { !/^\./ } @initial_slaves;
     }
