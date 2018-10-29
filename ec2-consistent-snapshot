@@ -14,7 +14,7 @@ use IO::Socket::SSL;
 use LWP::UserAgent qw();
 eval 'use Mozilla::CA';
 use Time::HiRes qw(ualarm usleep);
-use Net::Amazon::EC2 0.33;
+use Net::Amazon::EC2 0.29;
 use POSIX ':signal_h';
 use DateTime::Locale;
 use DateTime::TimeZone;
