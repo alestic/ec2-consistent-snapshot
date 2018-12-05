@@ -1,12 +1,28 @@
-# SUPPORT STATUS
-
-This project is no longer maintained. Modern filesystems and databases have built-in crash recovery, minimizing the importance of "consistent" snapshots. You might be fine without a consistent-snapshot tool. This project was written in Perl, which has no SDK officially supported by Amazon. 
-
-For a similar project, you can check out [ec2-consistent-snapshot.sh](https://github.com/RideAmigosCorp/ec2-consistent-snapshot.sh) which is inspired by this project and written by one of the former maintainers. It has fewer features and options, but uses the officially supported AWS CLI. 
-
 # NAME
 
 ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
+
+# SUPPORT STATUS
+
+This project is no longer maintained. It is unclear if such a tool is
+really necessary on EC2/EBS.
+
+1\. Modern filesystems and databases have built-in crash recovery,
+   minimizing the importance of "consistent" snapshots.
+
+2\. If creating consistent snapshots were a real issue, then surely
+   Amazon would be recommending it in official documentation and would
+   be providing tools to enable it.
+
+3\. This project was written in Perl, which has no SDK officially
+   supported by Amazon.
+
+If you are still interested in creating consistent snapshots of file
+systems using a supported project, you can check out
+\[ec2-consistent-snapshot.sh\](https://github.com/RideAmigosCorp/ec2-consistent-snapshot.sh)
+which is inspired by this project and written by one of the former
+maintainers. It has fewer features and options, but uses the
+officially supported AWS CLI.
 
 # SYNOPSIS
 
@@ -496,11 +512,12 @@ providing feature development, feedback, bug reports, and patches:
 
 # AUTHOR/MAINTAINER
 
-Eric Hammond <ehammond@thinksome.com>
+Eric Hammond &lt;https://github.com/ehammond>
+Mark Stosberg &lt;https://github.com/markstos>
 
 # LICENSE
 
-Copyright 2009-2015 Eric Hammond <ehammond@thinksome.com>
+Copyright 2009-2018 Eric Hammond
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
