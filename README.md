@@ -1,3 +1,9 @@
+# SUPPORT STATUS
+
+This project is no longer maintained. Modern filesystems and databases have built-in crash recovery, minimizing the importance of "consistent" snapshots. You might be fine without a consistent-snapshot tool. This project was written in Perl, which has no SDK officially supported by Amazon. 
+
+For a similar project, you can check out [ec2-consistent-snapshot.sh](https://github.com/RideAmigosCorp/ec2-consistent-snapshot.sh) which is inspired by this project and written by one of the former maintainers. It has fewer features and options, but uses the officially supported AWS CLI. 
+
 # NAME
 
 ec2-consistent-snapshot - Create EBS snapshots on EC2 w/consistent filesystem/db
