@@ -19,13 +19,13 @@ really necessary on EC2/EBS.
 
 If you are still interested in creating consistent snapshots of file
 systems using a supported project, you can check out
-[ec2-consistent-snapshot.sh](https://metacpan.org/pod/\(https:#github.com-RideAmigosCorp-ec2-consistent-snapshot.sh)
+[ec2-consistent-snapshot.sh](https://github.com/RideAmigosCorp/ec2-consistent-snapshot.sh)
 which is inspired by this project and written by one of the former
 maintainers. It has fewer features and options, but uses the
 officially supported AWS CLI.
 
 You are also welcome to fork this project and continue working on it
-under the terms of the [LICENSE](https://metacpan.org/pod/LICENSE).
+under the terms of the ["LICENSE"](#license).
 
 # SYNOPSIS
 
@@ -517,6 +517,8 @@ providing feature development, feedback, bug reports, and patches:
 
 Eric Hammond &lt;https://github.com/ehammond>
 Mark Stosberg &lt;https://github.com/markstos>
+
+<a name="license"></a>
 
 # LICENSE
 
