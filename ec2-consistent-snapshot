@@ -999,7 +999,7 @@ maintainers. It has fewer features and options, but uses the
 officially supported AWS CLI.
 
 You are also welcome to fork this project and continue working on it
-under the terms of the L<LICENSE>.
+under the terms of the L</LICENSE>.
 
 =head1 SYNOPSIS
 
@@ -1520,6 +1520,8 @@ providing feature development, feedback, bug reports, and patches:
 
 Eric Hammond <https://github.com/ehammond>
 Mark Stosberg <https://github.com/markstos>
+
+=for markdown <a name="license"></a>
 
 =head1 LICENSE
 
