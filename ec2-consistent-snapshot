@@ -521,29 +521,24 @@ sub discover_volume_ids {
     }
 
     for my $device (@devices) {
-      my ($ec2_device, $ec2_device_2, $ec2_device_3, $ec2_device_4, $volume_id);
-      $ec2_device = $ec2_device_2 = $ec2_device_3 = $ec2_device_4 = "/dev/$device";
+      my ($ec2_device, $ec2_device_2, $ec2_device_3, $volume_id);
+      $ec2_device = $ec2_device_2 = $ec2_device_3 = "/dev/$device";
 
       $ec2_device =~ s/\bxvd/sd/;
       $ec2_device_2 =~ s/\bxvd([a-z])\d?/sd$1/;
       $ec2_device_3 =~ s/\bxvd([a-z]\d)/sd$1/;
 
       # Need to handle NVME devices, which require some digging to get the EBS "device name"
-      if ( $ec2_device_4 =~ m/nvme[0-9]n[0-9]p?[0-9]?/ ) {
+      if ( $ec2_device =~ m/nvme[0-9]n[0-9]p?[0-9]?/ ) {
         # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/nvme-ebs-volumes.html
-        my $nvme_output = `nvme id-ctrl -v $ec2_device_4`;
+        my $nvme_output = `nvme id-ctrl $ec2_device`;
         if ($? == -1) {
           die "$Prog: 'nvme' command invocation failed with error '$!', you may need to install the 'nvme-cli' package";
         }
 
-        if ( $nvme_output =~ m/0000:\s[0-9a-fA-F\s]+\s"(sd[a-z][0-9]?)\./ ) {
-          $ec2_device_4 = '/dev/' . $1;
-          warn "$Prog: ", scalar localtime, ": Found NVME block device $ec2_device_4\n" if $Debug;
-        }
-        # nvme-cli can somtimes return a prefix of '/dev/' in front of the device name..
-        elsif ( $nvme_output =~ m/0000:\s[0-9a-fA-F\s]+\s"(\/dev\/sd[a-z][0-9]?)\./ ) {
-          $ec2_device_4 = $1;
-          warn "$Prog: ", scalar localtime, ": Found NVME block device $ec2_device_4\n" if $Debug;
+        if ( $nvme_output =~ m/sn\s+: vol([a-z0-9]+)/ ) {
+          $volume_id = "vol-$1";
+          warn "$Prog: ", scalar localtime, ": Obtaining volume id for NVMe device $ec2_device from serial number $1\n" if $Debug;
         }
         else {
           warn "$Prog: ", scalar localtime, ": Block device looks like NVME but i couldn't determine volume name\n" if $Debug;
@@ -554,7 +549,6 @@ sub discover_volume_ids {
       $volume_id = $ebs_volume_ids{$ec2_device} if defined $ebs_volume_ids{$ec2_device};
       $volume_id = $ebs_volume_ids{$ec2_device_2} if defined $ebs_volume_ids{$ec2_device_2};
       $volume_id = $ebs_volume_ids{$ec2_device_3} if defined $ebs_volume_ids{$ec2_device_3};
-      $volume_id = $ebs_volume_ids{$ec2_device_4} if defined $ebs_volume_ids{$ec2_device_4};
 
       unless ( defined $volume_id ) {
         warn "$Prog: ERROR: Unable to determine volume id for device $device in mount $fs\n";
